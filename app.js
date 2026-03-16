@@ -495,7 +495,13 @@ function renderSettings(p) {
   if (fmt === 'round-robin') {
     html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">单循环赛无需分组，所有' + (isD ? '队伍' : '选手') + '进行循环赛。</div></div>'
   } else if (fmt === 'nine-team') {
-    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">自动分为3组，每组3队。经过小组赛→6强赛→复活赛→半决赛→决赛决出1-9名。</div></div>'
+    if (!s.round6Rule) s.round6Rule = 'ranked'
+    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">自动分为3组，每组3队。经过小组赛→6强赛→复活赛→4强赛→决赛决出1-9名。</div></div>'
+    html += '<div class="card"><div class="section-title mb-sm">⚔️ 6强赛对阵规则</div>'
+    html += '<div class="draw-options">'
+    html += '<div class="draw-option' + (s.round6Rule === 'ranked' ? ' active' : '') + '" data-r6rule="ranked"><div class="draw-option-title">📊 按排名对阵</div><div class="draw-option-desc">A1vsB2, B1vsC2, C1vsA2</div></div>'
+    html += '<div class="draw-option' + (s.round6Rule === 'random' ? ' active' : '') + '" data-r6rule="random"><div class="draw-option-title">🎲 随机抽签</div><div class="draw-option-desc">6队随机两两配对</div></div>'
+    html += '</div></div>'
   } else if (fmt === 'group-knockout') {
     html += '<div class="card"><div class="section-title mb-sm">📊 分组设置</div>'
     html += '<div class="method-input-row"><span class="seed-label">组数</span><input class="input-field method-input" id="inp-gc" type="number" min="2" value="' + (s.groupCount || 2) + '"><span class="text-sm text-hint ml-sm">每组约 ' + Math.ceil(itemCount / (s.groupCount || 2)) + (isD ? '队' : '人') + '</span></div>'
@@ -548,6 +554,9 @@ function mountSettings(p) {
 
   document.querySelectorAll('[data-rule]').forEach(function (el) {
     el.onclick = function () { s.koRule = el.dataset.rule; t.settings = s; saveTournament(t); render() }
+  })
+  document.querySelectorAll('[data-r6rule]').forEach(function (el) {
+    el.onclick = function () { s.round6Rule = el.dataset.r6rule; t.settings = s; saveTournament(t); render() }
   })
   document.querySelectorAll('[data-dm]').forEach(function (el) {
     el.onclick = function () { s.drawMethod = el.dataset.dm; t.settings = s; saveTournament(t); render() }
@@ -665,12 +674,70 @@ function mountResult(p) {
 
 function doExport(t) {
   showActionSheet([
-    { text: '📋 导出分组名单', action: function () { exportGroupList(t) } },
-    { text: '📅 导出赛程表', action: function () { exportSchedule(t) } },
-    { text: '📊 导出比分表', action: function () { exportScores(t) } },
-    { text: '🏆 导出排名', action: function () { exportRankings(t) } },
+    { text: '📋 导出分组名单 (Excel)', action: function () { exportGroupList(t) } },
+    { text: '📅 导出赛程表 (Excel)', action: function () { exportSchedule(t) } },
+    { text: '📊 导出比分表 (Excel)', action: function () { exportScores(t) } },
+    { text: '🏆 导出排名 (Excel)', action: function () { exportRankings(t) } },
+    { text: '🖼️ 导出分组图片', action: function () { chooseImageTheme(t, 'groups') } },
+    { text: '🖼️ 导出排名图片', action: function () { chooseImageTheme(t, 'rankings') } },
     { text: '📝 复制文字结果', action: function () { copyTextResult(t) } }
   ])
+}
+
+function chooseImageTheme(t, type) {
+  showActionSheet([
+    { text: '⬜ 简约白', action: function () { exportAsImage(t, type, 'light') } },
+    { text: '🟢 网球绿', action: function () { exportAsImage(t, type, 'green') } },
+    { text: '⬛ 深色模式', action: function () { exportAsImage(t, type, 'dark') } }
+  ])
+}
+
+function exportAsImage(t, type, theme) {
+  var th = IMG_THEMES[theme] || IMG_THEMES.light
+  var body = ''
+  if (type === 'groups') {
+    ;(t.groups || []).forEach(function (g) {
+      body += '<div style="margin-bottom:12px"><div style="font-size:15px;font-weight:700;color:'+th.accent+';margin-bottom:6px">'+esc(g.name)+' 组</div>'
+      g.members.forEach(function (m, i) {
+        body += '<div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid '+th.border+'">'
+        body += '<span style="width:24px;font-size:12px;color:'+th.sub+'">'+(i+1)+'</span>'
+        body += '<span style="flex:1;font-size:14px;font-weight:500">'+esc(m.name)+'</span>'
+        body += '<span style="font-size:12px;font-weight:700;color:'+th.accent+'">'+m.score+'分</span>'
+        if (m.isSeed) body += '<span style="margin-left:4px;font-size:10px;color:'+th.accent+'">★</span>'
+        body += '</div>'
+      })
+      body += '</div>'
+    })
+  } else if (type === 'rankings') {
+    if (t.format === 'nine-team') {
+      var rk = compute9TeamFinalRankings(t)
+      if (rk.length > 0) {
+        rk.forEach(function (r) {
+          var icon = r.rank <= 3 ? ['🥇','🥈','🥉'][r.rank-1] : '#'+r.rank
+          body += '<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid '+th.border+'">'
+          body += '<span style="width:36px;font-size:16px;text-align:center">'+icon+'</span>'
+          body += '<span style="flex:1;font-size:14px;font-weight:600">'+esc(r.team.name)+'</span>'
+          body += '<span style="font-size:12px;color:'+th.sub+'">'+esc(r.label)+'</span></div>'
+        })
+      } else { body += '<div style="text-align:center;padding:20px;color:'+th.sub+'">比赛尚未完成</div>' }
+    } else {
+      ;(t.groups || []).forEach(function (g) {
+        var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
+        var st = calculateStandings(gm, g.members)
+        body += '<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;color:'+th.accent+';margin-bottom:6px">'+esc(g.name)+' 组排名</div>'
+        st.forEach(function (s, i) {
+          body += '<div style="display:flex;align-items:center;padding:4px 0;border-bottom:1px solid '+th.border+'">'
+          body += '<span style="width:24px;font-size:12px;color:'+th.sub+'">'+(i+1)+'</span>'
+          body += '<span style="flex:1;font-size:13px;font-weight:500">'+esc(s.name)+'</span>'
+          body += '<span style="font-size:12px;color:'+th.sub+'">'+s.wins+'胜'+s.losses+'负</span>'
+          body += '<span style="margin-left:8px;font-size:12px;font-weight:700;color:'+th.accent+'">'+s.points+'分</span></div>'
+        })
+        body += '</div>'
+      })
+    }
+  }
+  var info = renderExportImage(t.name + (type === 'groups' ? ' — 分组名单' : ' — 排名'), body, theme)
+  captureAndDownload(info.el, t.name + '_' + type + '.png')
 }
 
 function exportGroupList(t) {
@@ -820,7 +887,7 @@ function render9TeamSchedule(t) {
   var nt = t.nineTeam || init9TeamData()
   var stages = [
     { key: 'group', label: '小组赛' }, { key: 'round6', label: '6强赛' },
-    { key: 'revival', label: '复活赛' }, { key: 'semi', label: '半决赛' },
+    { key: 'revival', label: '复活赛' }, { key: 'semi', label: '4强赛' },
     { key: 'final', label: '决赛' }, { key: 'ranking', label: '排位赛' }
   ]
   var curStage = _ps.curStage || 'group'
@@ -869,12 +936,12 @@ function render9TeamSchedule(t) {
       var rvDone = is9TeamStageComplete(t, 'revival')
       if (rvDone && !_viewer) {
         var hasSemi = get9TeamStageMatches(t, 'semi').length > 0
-        if (!hasSemi) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-draw-semi">🎲 半决赛抽签</button></div>'
+        if (!hasSemi) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-draw-semi">🎲 4强赛抽签</button></div>'
       }
     }
   } else if (curStage === 'semi') {
     var sm = get9TeamStageMatches(t, 'semi')
-    if (sm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成复活赛并进行半决赛抽签</div></div>'
+    if (sm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成复活赛并进行4强赛抽签</div></div>'
     else {
       html += renderMatchList(sm, t)
       var semiDone = is9TeamStageComplete(t, 'semi')
@@ -885,7 +952,7 @@ function render9TeamSchedule(t) {
     }
   } else if (curStage === 'final') {
     var fm = (t.matches || []).filter(function (m) { return m.stage === 'final' || m.stage === 'third' })
-    if (fm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成半决赛</div></div>'
+    if (fm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成4强赛</div></div>'
     else html += renderMatchList(fm, t)
   } else if (curStage === 'ranking') {
     var rkm = get9TeamStageMatches(t, 'ranking')
@@ -991,7 +1058,7 @@ function mountSchedule(p) {
   if (gr6) gr6.onclick = function () {
     t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
     var gs = get9TeamGroupStandings(t)
-    var r6m = generate9TeamRound6Matches(gs)
+    var r6m = generate9TeamRound6Matches(gs, (t.settings && t.settings.round6Rule) || 'ranked')
     t.matches = (t.matches || []).concat(r6m)
     nt.stageStatus.group = 'completed'; nt.stageStatus.round6 = 'in_progress'
     t.nineTeam = nt; saveTournament(t)
@@ -1057,7 +1124,7 @@ function mountSchedule(p) {
     nt.stageStatus.revival = 'completed'; nt.stageStatus.semi = 'in_progress'
     nt.semiFinalDrawn = true
     t.nineTeam = nt; saveTournament(t)
-    showToast('半决赛抽签完成'); _ps.curStage = 'semi'; render()
+    showToast('4强赛抽签完成'); _ps.curStage = 'semi'; render()
   }
 
   /* 9-team: generate finals */

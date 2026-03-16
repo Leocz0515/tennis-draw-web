@@ -289,7 +289,7 @@ function generateSingleKnockoutBracket(standings, teamCount, rule, hasThirdPlace
 
 /* ===== 9-Team Battle Format ===== */
 var NINE_STAGES = ['group','round6','revival','semi','final','third','ranking']
-var NINE_STAGE_LABELS = {group:'小组赛',round6:'6强赛',revival:'复活赛',semi:'半决赛',final:'决赛/季军赛',third:'',ranking:'排位赛'}
+var NINE_STAGE_LABELS = {group:'小组赛',round6:'6强赛',revival:'复活赛',semi:'4强赛',final:'决赛/季军赛',third:'',ranking:'排位赛'}
 
 function init9TeamData() {
   return {
@@ -304,13 +304,23 @@ function init9TeamData() {
   }
 }
 
-function generate9TeamRound6Matches(groupStandings) {
+function generate9TeamRound6Matches(groupStandings, rule) {
   var A=groupStandings['A']||[], B=groupStandings['B']||[], C=groupStandings['C']||[]
   if(A.length<2||B.length<2||C.length<2) return []
+  function mkTeam(t){return {id:t.id,name:t.name,score:t.score}}
+  if (rule === 'random') {
+    var pool = [A[0],A[1],B[0],B[1],C[0],C[1]]
+    pool = shuffleArray(pool)
+    return [
+      {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛1',team1:mkTeam(pool[0]),team2:mkTeam(pool[1]),score1:'',score2:'',winnerId:null,status:'pending'},
+      {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛2',team1:mkTeam(pool[2]),team2:mkTeam(pool[3]),score1:'',score2:'',winnerId:null,status:'pending'},
+      {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛3',team1:mkTeam(pool[4]),team2:mkTeam(pool[5]),score1:'',score2:'',winnerId:null,status:'pending'}
+    ]
+  }
   return [
-    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛1',team1:{id:A[0].id,name:A[0].name,score:A[0].score},team2:{id:B[1].id,name:B[1].name,score:B[1].score},score1:'',score2:'',winnerId:null,status:'pending'},
-    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛2',team1:{id:B[0].id,name:B[0].name,score:B[0].score},team2:{id:C[1].id,name:C[1].name,score:C[1].score},score1:'',score2:'',winnerId:null,status:'pending'},
-    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛3',team1:{id:C[0].id,name:C[0].name,score:C[0].score},team2:{id:A[1].id,name:A[1].name,score:A[1].score},score1:'',score2:'',winnerId:null,status:'pending'}
+    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛1 (A1vsB2)',team1:mkTeam(A[0]),team2:mkTeam(B[1]),score1:'',score2:'',winnerId:null,status:'pending'},
+    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛2 (B1vsC2)',team1:mkTeam(B[0]),team2:mkTeam(C[1]),score1:'',score2:'',winnerId:null,status:'pending'},
+    {id:makeMatchId('r6'),stage:'round6',matchLabel:'6强赛3 (C1vsA2)',team1:mkTeam(C[0]),team2:mkTeam(A[1]),score1:'',score2:'',winnerId:null,status:'pending'}
   ]
 }
 
@@ -332,11 +342,11 @@ function generate9TeamSemiFinalDraw(winners, revivalWinner) {
   var pool = winners.concat([revivalWinner])
   pool = shuffleArray(pool)
   return [
-    {id:makeMatchId('sf'),stage:'semi',matchLabel:'半决赛1',
+    {id:makeMatchId('sf'),stage:'semi',matchLabel:'4强赛1',
       team1:{id:pool[0].id,name:pool[0].name,score:pool[0].score},
       team2:{id:pool[1].id,name:pool[1].name,score:pool[1].score},
       score1:'',score2:'',winnerId:null,status:'pending'},
-    {id:makeMatchId('sf'),stage:'semi',matchLabel:'半决赛2',
+    {id:makeMatchId('sf'),stage:'semi',matchLabel:'4强赛2',
       team1:{id:pool[2].id,name:pool[2].name,score:pool[2].score},
       team2:{id:pool[3].id,name:pool[3].name,score:pool[3].score},
       score1:'',score2:'',winnerId:null,status:'pending'}
@@ -441,4 +451,40 @@ function compute9TeamFinalRankings(tournament) {
 
   rankings.sort(function(a,b){return a.rank-b.rank})
   return rankings
+}
+
+/* ===== Image Export ===== */
+var IMG_THEMES = {
+  light: {bg:'linear-gradient(135deg,#FFFFFF,#F0F4F8)',text:'#2D3436',accent:'#7CB342',sub:'#636E72',border:'#E0E0E0'},
+  green: {bg:'linear-gradient(135deg,#E8F5E9,#C8E6C9,#A5D6A7)',text:'#1B5E20',accent:'#43A047',sub:'#4CAF50',border:'#81C784'},
+  dark:  {bg:'linear-gradient(135deg,#263238,#37474F,#455A64)',text:'#ECEFF1',accent:'#FFB74D',sub:'#B0BEC5',border:'#546E7A'}
+}
+
+function renderExportImage(title, bodyHtml, theme) {
+  var th = IMG_THEMES[theme] || IMG_THEMES.light
+  var container = document.createElement('div')
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:480px;padding:28px;background:'+th.bg+';font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Helvetica,Arial,sans-serif;color:'+th.text+';border-radius:16px;'
+  container.innerHTML = '<div style="text-align:center;margin-bottom:16px"><div style="font-size:14px;color:'+th.sub+'">🎾 网球赛事管理系统</div><div style="font-size:20px;font-weight:800;margin-top:6px">'+esc(title)+'</div></div><div style="border-top:2px solid '+th.border+';padding-top:14px">'+bodyHtml+'</div><div style="text-align:center;margin-top:16px;font-size:11px;color:'+th.sub+'">'+formatTime(Date.now())+' 导出</div>'
+  document.body.appendChild(container)
+  return { el: container, theme: th }
+}
+
+function captureAndDownload(el, filename, callback) {
+  if (typeof html2canvas === 'undefined') {
+    showToast('图片导出库加载中，请稍后再试')
+    document.body.removeChild(el)
+    return
+  }
+  html2canvas(el, {scale:2, backgroundColor:null, useCORS:true}).then(function(canvas) {
+    document.body.removeChild(el)
+    var link = document.createElement('a')
+    link.download = filename
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    if (callback) callback()
+    showToast('图片已保存')
+  }).catch(function() {
+    document.body.removeChild(el)
+    showToast('导出失败')
+  })
 }
