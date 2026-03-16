@@ -256,8 +256,11 @@ function renderPlayers(p) {
   var html = '<div class="container">'
   html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">👤 选手管理</div><div style="width:40px"></div></div>'
   html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">共 ' + total + ' 人 · 平均积分 ' + avg + '</div></div><div class="score-badge">' + esc(TYPE[t.type]) + '</div></div></div>'
-  if (t.format === 'nine-team' && total !== 9) html += '<div class="guide-tip">⚠️ 9组大战赛需要恰好 9 名选手/队伍</div>'
-  else if (total === 0) html += '<div class="guide-tip">💡 点击下方"添加选手"开始，或导入Excel/CSV文件</div>'
+  if (t.format === 'nine-team') {
+    if (t.type === 'doubles') {
+      if (total < 18) html += '<div class="guide-tip">💡 双打9组大战赛建议18名选手（组成9支队伍）</div>'
+    } else if (total !== 9) html += '<div class="guide-tip">⚠️ 单打9组大战赛需要恰好 9 名选手</div>'
+  } else if (total === 0) html += '<div class="guide-tip">💡 点击下方"添加选手"开始，或导入Excel/CSV文件</div>'
   html += '<div class="card"><div class="section-title mb-sm">添加选手</div>'
   html += '<div class="add-row"><input class="input-field" id="inp-pname" placeholder="姓名"><input class="input-field score-input" id="inp-pscore" placeholder="积分" type="number" min="0"><button class="btn-primary btn-mini" id="btn-add">添加</button></div>'
   if (_ps.editId) html += '<div class="edit-hint" id="cancel-edit">当前正在编辑，点此取消</div>'
@@ -282,7 +285,8 @@ function renderPlayers(p) {
   }
   html += '</div>'
   var nextLabel = t.type === 'doubles' ? '下一步：组队 →' : '下一步：抽签设置 →'
-  var disabled = (t.format === 'nine-team' && total !== 9) || total < 2
+  var disabled = total < 2
+  if (t.format === 'nine-team' && t.type === 'singles' && total !== 9) disabled = true
   html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (disabled ? ' btn-disabled' : '') + '" id="btn-next">' + nextLabel + '</button></div>'
   html += '</div>'
   return html
@@ -368,7 +372,7 @@ function mountPlayers(p) {
   }
 
   document.getElementById('btn-next').onclick = function () {
-    if (t.format === 'nine-team' && t.players.length !== 9) { showToast('9组大战赛需要恰好9名选手'); return }
+    if (t.format === 'nine-team' && t.type === 'singles' && t.players.length !== 9) { showToast('单打9组大战赛需要恰好9名选手'); return }
     if (t.players.length < 2) { showToast('至少需要2名选手'); return }
     if (t.type === 'doubles') navigate('/pairing?id=' + t.id)
     else navigate('/settings?id=' + t.id)
@@ -527,10 +531,32 @@ function renderSettings(p) {
     html += '<div class="draw-options">'
     html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">🐍 蛇形分组</div><div class="draw-option-desc">按积分排序蛇形分配</div></div>'
     html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机抽签</div><div class="draw-option-desc">种子固定后随机分配</div></div>'
+    if (fmt === 'nine-team') {
+      html += '<div class="draw-option' + (s.drawMethod === 'custom' ? ' active' : '') + '" data-dm="custom"><div class="draw-option-title">✏️ 自定义</div><div class="draw-option-desc">手动分配到各组</div></div>'
+    }
     html += '</div></div>'
 
-    html += '<div class="card"><div class="section-title mb-sm">⭐ 种子设置</div>'
-    html += '<div class="seed-row"><span class="seed-label">种子数量</span><input class="input-field seed-input" id="inp-seed" type="number" min="0" max="' + itemCount + '" value="' + (s.seedCount || 0) + '"><span class="text-sm text-hint ml-sm">前N名为种子</span></div></div>'
+    if (s.drawMethod === 'custom' && fmt === 'nine-team') {
+      if (!s.customGroups) { s.customGroups = {}; items.forEach(function(it,idx) { s.customGroups[it.id] = String.fromCharCode(65 + (idx % 3)) }) }
+      var gcA = 0, gcB = 0, gcC = 0
+      items.forEach(function(it) { var g = s.customGroups[it.id]; if (g === 'A') gcA++; else if (g === 'B') gcB++; else if (g === 'C') gcC++ })
+      html += '<div class="card"><div class="section-title mb-sm">📝 手动分组</div>'
+      html += '<div class="text-sm text-secondary mb-sm">将' + (isD ? '队伍' : '选手') + '分配到A、B、C组（A:' + gcA + ' B:' + gcB + ' C:' + gcC + '）</div>'
+      items.forEach(function(it) {
+        var assigned = s.customGroups[it.id] || 'A'
+        html += '<div class="custom-group-row"><div class="custom-group-name">' + esc(it.name) + '</div><div class="custom-group-name-score">' + it.score + '</div><div class="custom-group-btns">'
+        ;['A', 'B', 'C'].forEach(function(g) {
+          html += '<div class="group-btn' + (assigned === g ? ' active' : '') + '" data-cg-id="' + it.id + '" data-cg-group="' + g + '" style="padding:5px 14px;font-size:12px">' + g + '</div>'
+        })
+        html += '</div></div>'
+      })
+      html += '</div>'
+    }
+
+    if (s.drawMethod !== 'custom') {
+      html += '<div class="card"><div class="section-title mb-sm">⭐ 种子设置</div>'
+      html += '<div class="seed-row"><span class="seed-label">种子数量</span><input class="input-field seed-input" id="inp-seed" type="number" min="0" max="' + itemCount + '" value="' + (s.seedCount || 0) + '"><span class="text-sm text-hint ml-sm">前N名为种子</span></div></div>'
+    }
   }
 
   html += '<div class="bottom-bar"><button class="btn-accent btn-block" id="btn-draw">🎾 开始抽签</button></div>'
@@ -561,6 +587,13 @@ function mountSettings(p) {
   document.querySelectorAll('[data-dm]').forEach(function (el) {
     el.onclick = function () { s.drawMethod = el.dataset.dm; t.settings = s; saveTournament(t); render() }
   })
+  document.querySelectorAll('[data-cg-id]').forEach(function (el) {
+    el.onclick = function () {
+      if (!s.customGroups) s.customGroups = {}
+      s.customGroups[el.dataset.cgId] = el.dataset.cgGroup
+      t.settings = s; saveTournament(t); render()
+    }
+  })
   var sd = document.getElementById('inp-seed')
   if (sd) sd.oninput = function () { s.seedCount = Math.max(0, parseInt(sd.value) || 0); t.settings = s; saveTournament(t) }
 
@@ -571,8 +604,18 @@ function mountSettings(p) {
     if (fmt === 'round-robin') {
       t.groups = [{ name: 'A', members: shuffleArray(items.map(function (x) { return Object.assign({}, x) })) }]
     } else if (fmt === 'nine-team') {
-      var gc = 3, sc = Math.min(s.seedCount || 0, items.length)
-      t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+      if (s.drawMethod === 'custom' && s.customGroups) {
+        var gMap = {A:[],B:[],C:[]}
+        items.forEach(function(it) {
+          var g = s.customGroups[it.id] || 'A'
+          if (gMap[g]) gMap[g].push(Object.assign({}, it))
+          else gMap['A'].push(Object.assign({}, it))
+        })
+        t.groups = [{name:'A',members:gMap.A},{name:'B',members:gMap.B},{name:'C',members:gMap.C}]
+      } else {
+        var gc = 3, sc = Math.min(s.seedCount || 0, items.length)
+        t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+      }
     } else if (fmt === 'group-knockout') {
       var gc = s.groupCount || 2, sc = Math.min(s.seedCount || 0, items.length)
       t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
@@ -972,7 +1015,7 @@ function renderMatchList(matches, t) {
     else if (m.round) html += '<div class="match-round">第 ' + m.round + ' 轮' + (m.groupName ? ' · ' + m.groupName + '组' : '') + '</div>'
     html += '<div class="match-teams">'
     html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team1 ? m.team1.id : '') ? ' winner' : '') + (m.team1 ? '' : ' tbd') + '">' + (m.team1 ? esc(m.team1.name) : 'TBD') + '</div></div>'
-    html += '<div class="match-vs">' + (m.status === 'finished' ? (m.score1 || '0') + ' : ' + (m.score2 || '0') : 'VS') + '</div>'
+    html += '<div class="match-vs' + (m.status === 'finished' ? ' has-score' : '') + '">' + (m.status === 'finished' ? (m.score1 || '0') + ' : ' + (m.score2 || '0') : 'VS') + '</div>'
     html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team2 ? m.team2.id : '') ? ' winner' : '') + (m.team2 ? '' : ' tbd') + '">' + (m.team2 ? esc(m.team2.name) : 'TBD') + '</div></div>'
     html += '</div>'
     if (m.status === 'finished') html += '<div class="match-status"><span class="tag tag-green">已完成</span></div>'
@@ -1357,14 +1400,16 @@ function render9TeamRankings(t) {
 function renderStandingsTable(standings, qualifyCount) {
   if (standings.length === 0) return '<div class="text-center text-hint" style="padding:10px">暂无排名数据</div>'
   var html = '<div class="standings-table">'
-  html += '<div class="table-header"><div class="col-rank">#</div><div class="col-name">名称</div><div class="col-stat">胜</div><div class="col-stat">负</div><div class="col-points">积分</div></div>'
+  html += '<div class="table-header"><div class="col-rank">#</div><div class="col-name">名称</div><div class="col-stat">胜</div><div class="col-stat">负</div><div class="col-stat">净局</div><div class="col-points">积分</div></div>'
   standings.forEach(function (s, i) {
+    var net = (s.scoreFor || 0) - (s.scoreAgainst || 0)
+    var netStr = net > 0 ? '+' + net : String(net)
     html += '<div class="table-row"><div class="col-rank' + (i < 3 ? ' top' : '') + '">'
     if (i < 3) html += ['🥇', '🥈', '🥉'][i]
     else html += (i + 1)
     html += '</div><div class="col-name">' + esc(s.name)
     if (qualifyCount > 0 && i < qualifyCount) html += ' <span class="qualify-tag">出线</span>'
-    html += '</div><div class="col-stat text-bold">' + s.wins + '</div><div class="col-stat">' + s.losses + '</div><div class="col-points"><span class="score-badge">' + s.points + '</span></div></div>'
+    html += '</div><div class="col-stat text-bold">' + s.wins + '</div><div class="col-stat">' + s.losses + '</div><div class="col-stat' + (net > 0 ? ' text-primary' : (net < 0 ? ' text-danger' : '')) + '">' + netStr + '</div><div class="col-points"><span class="score-badge">' + s.points + '</span></div></div>'
   })
   html += '</div>'
   return html

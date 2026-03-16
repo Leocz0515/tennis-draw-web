@@ -201,22 +201,39 @@ function generateAllGroupMatches(groups) {
   return all
 }
 
+function parseNetGames(scoreStr) {
+  if (!scoreStr) return {won:0,lost:0}
+  var won=0,lost=0
+  String(scoreStr).split(/[,，]/).forEach(function(part){
+    var m=part.trim().match(/(\d+)\s*[-:：]\s*(\d+)/)
+    if(m){won+=parseInt(m[1]);lost+=parseInt(m[2])}
+  })
+  return {won:won,lost:lost}
+}
+
 function calculateStandings(matches, members) {
   var map={}
   members.forEach(function(m){map[m.id]={id:m.id,name:m.name,score:m.score,played:0,wins:0,losses:0,points:0,scoreFor:0,scoreAgainst:0}})
   matches.filter(function(m){return m.status==='finished'&&m.winnerId}).forEach(function(m){
+    var s1=parseNetGames(m.score1)
     if (map[m.team1.id]) {
       map[m.team1.id].played++
+      map[m.team1.id].scoreFor+=s1.won
+      map[m.team1.id].scoreAgainst+=s1.lost
       if(m.winnerId===m.team1.id){map[m.team1.id].wins++;map[m.team1.id].points+=2} else{map[m.team1.id].losses++;map[m.team1.id].points+=1}
     }
     if (map[m.team2.id]) {
       map[m.team2.id].played++
+      map[m.team2.id].scoreFor+=s1.lost
+      map[m.team2.id].scoreAgainst+=s1.won
       if(m.winnerId===m.team2.id){map[m.team2.id].wins++;map[m.team2.id].points+=2} else{map[m.team2.id].losses++;map[m.team2.id].points+=1}
     }
   })
   return Object.values(map).sort(function(a,b){
     if(b.points!==a.points) return b.points-a.points
     if(b.wins!==a.wins) return b.wins-a.wins
+    var netA=a.scoreFor-a.scoreAgainst, netB=b.scoreFor-b.scoreAgainst
+    if(netB!==netA) return netB-netA
     return b.score-a.score
   })
 }
