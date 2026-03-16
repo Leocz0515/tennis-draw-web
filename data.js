@@ -472,16 +472,26 @@ function compute9TeamFinalRankings(tournament) {
 
 /* ===== Image Export ===== */
 var IMG_THEMES = {
-  light: {bg:'linear-gradient(135deg,#FFFFFF,#F0F4F8)',text:'#2D3436',accent:'#7CB342',sub:'#636E72',border:'#E0E0E0'},
-  green: {bg:'linear-gradient(135deg,#E8F5E9,#C8E6C9,#A5D6A7)',text:'#1B5E20',accent:'#43A047',sub:'#4CAF50',border:'#81C784'},
-  dark:  {bg:'linear-gradient(135deg,#263238,#37474F,#455A64)',text:'#ECEFF1',accent:'#FFB74D',sub:'#B0BEC5',border:'#546E7A'}
+  light: {bg:'linear-gradient(160deg,#FAFBFF 0%,#E8ECF4 50%,#F0F4F8 100%)',text:'#1A1A2E',accent:'#6C5CE7',sub:'#636E72',border:'rgba(108,92,231,.12)',badge:'linear-gradient(135deg,#6C5CE7,#A29BFE)',badgeText:'#fff',cardBg:'rgba(108,92,231,.04)',headerBg:'linear-gradient(135deg,#6C5CE7,#A29BFE)',headerText:'#fff',tagBg:'rgba(108,92,231,.1)',tagText:'#6C5CE7'},
+  green: {bg:'linear-gradient(160deg,#E8F5E9 0%,#C8E6C9 50%,#A5D6A7 100%)',text:'#1B5E20',accent:'#2E7D32',sub:'#388E3C',border:'rgba(46,125,50,.15)',badge:'linear-gradient(135deg,#2E7D32,#4CAF50)',badgeText:'#fff',cardBg:'rgba(46,125,50,.05)',headerBg:'linear-gradient(135deg,#2E7D32,#43A047)',headerText:'#fff',tagBg:'rgba(46,125,50,.1)',tagText:'#2E7D32'},
+  dark:  {bg:'linear-gradient(160deg,#0B0B1A 0%,#1A1A3E 50%,#12122A 100%)',text:'#EEEEFF',accent:'#9B7FFF',sub:'#8888AA',border:'rgba(155,127,255,.15)',badge:'linear-gradient(135deg,#7C5CFC,#9B7FFF)',badgeText:'#fff',cardBg:'rgba(155,127,255,.06)',headerBg:'linear-gradient(135deg,#7C5CFC,#9B7FFF)',headerText:'#fff',tagBg:'rgba(155,127,255,.12)',tagText:'#B8A4FF'},
+  purple:{bg:'linear-gradient(160deg,#1A0B2E 0%,#2D1B69 40%,#16213E 100%)',text:'#F0E6FF',accent:'#BB86FC',sub:'#9575CD',border:'rgba(187,134,252,.15)',badge:'linear-gradient(135deg,#BB86FC,#E040FB)',badgeText:'#fff',cardBg:'rgba(187,134,252,.06)',headerBg:'linear-gradient(135deg,#BB86FC,#E040FB)',headerText:'#fff',tagBg:'rgba(187,134,252,.12)',tagText:'#CE93D8'}
 }
 
 function renderExportImage(title, bodyHtml, theme) {
   var th = IMG_THEMES[theme] || IMG_THEMES.light
   var container = document.createElement('div')
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:480px;padding:28px;background:'+th.bg+';font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Helvetica,Arial,sans-serif;color:'+th.text+';border-radius:16px;'
-  container.innerHTML = '<div style="text-align:center;margin-bottom:16px"><div style="font-size:14px;color:'+th.sub+'">🎾 网球赛事管理系统</div><div style="font-size:20px;font-weight:800;margin-top:6px">'+esc(title)+'</div></div><div style="border-top:2px solid '+th.border+';padding-top:14px">'+bodyHtml+'</div><div style="text-align:center;margin-top:16px;font-size:11px;color:'+th.sub+'">'+formatTime(Date.now())+' 导出</div>'
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:520px;padding:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Helvetica,Arial,sans-serif;color:'+th.text+';border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);'
+  var headerHtml = '<div style="background:'+th.headerBg+';padding:28px 32px 24px;position:relative;overflow:hidden">'
+  headerHtml += '<div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.1)"></div>'
+  headerHtml += '<div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.06)"></div>'
+  headerHtml += '<div style="font-size:32px;margin-bottom:6px;position:relative">🎾</div>'
+  headerHtml += '<div style="font-size:20px;font-weight:800;color:'+th.headerText+';position:relative;line-height:1.3">'+esc(title)+'</div>'
+  headerHtml += '<div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:8px;position:relative">'+formatTime(Date.now())+'</div>'
+  headerHtml += '</div>'
+  var bodyWrap = '<div style="background:'+th.bg+';padding:24px 28px 20px">'+bodyHtml+'</div>'
+  var footer = '<div style="background:'+th.bg+';padding:12px 28px 18px;text-align:center;border-top:1px solid '+th.border+'"><div style="font-size:11px;color:'+th.sub+'">网球赛事管理系统 · Tennis Draw</div></div>'
+  container.innerHTML = headerHtml + bodyWrap + footer
   document.body.appendChild(container)
   return { el: container, theme: th }
 }

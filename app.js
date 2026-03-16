@@ -414,7 +414,8 @@ function renderPairing(p) {
     html += '<div class="team-detail">' + esc(tm.player1.name) + '(' + tm.player1.score + ') + ' + esc(tm.player2.name) + '(' + tm.player2.score + ')</div></div>'
   })
 
-  var disabled = teams.length < 1 || (t.format === 'nine-team' && teams.length !== 9)
+  var disabled = teams.length < 1
+  if (t.format === 'nine-team' && teams.length !== 9) html += '<div class="guide-tip">⚠️ 9组大战赛需要恰好9支队伍（当前 ' + teams.length + ' 支）</div>'
   html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (disabled ? ' btn-disabled' : '') + '" id="btn-next">下一步：抽签设置 →</button></div>'
   html += '</div>'
   return html
@@ -470,6 +471,13 @@ function mountPairing(p) {
   }
   document.getElementById('btn-next').onclick = function () {
     if (t.teams.length < 1) { showToast('至少组成一队'); return }
+    if (t.format === 'nine-team' && t.teams.length !== 9) {
+      showModal({
+        title: '队伍数量提醒', content: '9组大战赛需要9支队伍（当前' + t.teams.length + '支），是否仍要继续？',
+        confirmText: '继续', onConfirm: function () { navigate('/settings?id=' + t.id) }
+      })
+      return
+    }
     navigate('/settings?id=' + t.id)
   }
 }
@@ -500,7 +508,8 @@ function renderSettings(p) {
     html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">单循环赛无需分组，所有' + (isD ? '队伍' : '选手') + '进行循环赛。</div></div>'
   } else if (fmt === 'nine-team') {
     if (!s.round6Rule) s.round6Rule = 'ranked'
-    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">自动分为3组，每组3队。经过小组赛→6强赛→复活赛→4强赛→决赛决出1-9名。</div></div>'
+    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">分为3组（A/B/C），每组' + Math.ceil(itemCount / 3) + (isD ? '队' : '人') + '。经过小组赛→6强赛→复活赛→4强赛→决赛决出排名。</div></div>'
+    if (itemCount !== 9) html += '<div class="guide-tip">⚠️ 9组大战赛建议9' + (isD ? '队' : '人') + '参赛（当前' + itemCount + '）</div>'
     html += '<div class="card"><div class="section-title mb-sm">⚔️ 6强赛对阵规则</div>'
     html += '<div class="draw-options">'
     html += '<div class="draw-option' + (s.round6Rule === 'ranked' ? ' active' : '') + '" data-r6rule="ranked"><div class="draw-option-title">📊 按排名对阵</div><div class="draw-option-desc">A1vsB2, B1vsC2, C1vsA2</div></div>'
@@ -527,21 +536,25 @@ function renderSettings(p) {
   }
 
   if (fmt !== 'round-robin') {
-    html += '<div class="card"><div class="section-title mb-sm">🎯 抽签方式</div>'
-    html += '<div class="draw-options">'
+    html += '<div class="card"><div class="section-title mb-sm">🎯 分组方式</div>'
+    html += '<div class="draw-options" style="flex-wrap:wrap">'
     html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">🐍 蛇形分组</div><div class="draw-option-desc">按积分排序蛇形分配</div></div>'
     html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机抽签</div><div class="draw-option-desc">种子固定后随机分配</div></div>'
     if (fmt === 'nine-team') {
-      html += '<div class="draw-option' + (s.drawMethod === 'custom' ? ' active' : '') + '" data-dm="custom"><div class="draw-option-title">✏️ 自定义</div><div class="draw-option-desc">手动分配到各组</div></div>'
+      html += '<div class="draw-option' + (s.drawMethod === 'custom' ? ' active' : '') + '" data-dm="custom"><div class="draw-option-title">✏️ 自定义分组</div><div class="draw-option-desc">手动将' + (isD ? '队伍' : '选手') + '分配到A/B/C组</div></div>'
     }
     html += '</div></div>'
 
     if (s.drawMethod === 'custom' && fmt === 'nine-team') {
-      if (!s.customGroups) { s.customGroups = {}; items.forEach(function(it,idx) { s.customGroups[it.id] = String.fromCharCode(65 + (idx % 3)) }) }
+      var existingIds = {}; items.forEach(function(it) { existingIds[it.id] = true })
+      if (!s.customGroups) s.customGroups = {}
+      var hasAll = items.every(function(it) { return s.customGroups[it.id] })
+      if (!hasAll) { s.customGroups = {}; items.forEach(function(it, idx) { s.customGroups[it.id] = String.fromCharCode(65 + (idx % 3)) }) }
       var gcA = 0, gcB = 0, gcC = 0
       items.forEach(function(it) { var g = s.customGroups[it.id]; if (g === 'A') gcA++; else if (g === 'B') gcB++; else if (g === 'C') gcC++ })
-      html += '<div class="card"><div class="section-title mb-sm">📝 手动分组</div>'
-      html += '<div class="text-sm text-secondary mb-sm">将' + (isD ? '队伍' : '选手') + '分配到A、B、C组（A:' + gcA + ' B:' + gcB + ' C:' + gcC + '）</div>'
+      html += '<div class="card"><div class="section-title mb-sm">📝 自定义分组</div>'
+      html += '<div class="flex-between mb-sm"><div class="text-sm text-secondary">点击 A/B/C 按钮分配各' + (isD ? '队伍' : '选手') + '所在组</div></div>'
+      html += '<div class="flex-row gap-md mb-sm" style="justify-content:center"><span class="tag tag-blue">A组: ' + gcA + '</span><span class="tag tag-green">B组: ' + gcB + '</span><span class="tag tag-orange">C组: ' + gcC + '</span></div>'
       items.forEach(function(it) {
         var assigned = s.customGroups[it.id] || 'A'
         html += '<div class="custom-group-row"><div class="custom-group-name">' + esc(it.name) + '</div><div class="custom-group-name-score">' + it.score + '</div><div class="custom-group-btns">'
@@ -598,9 +611,13 @@ function mountSettings(p) {
   if (sd) sd.oninput = function () { s.seedCount = Math.max(0, parseInt(sd.value) || 0); t.settings = s; saveTournament(t) }
 
   document.getElementById('btn-draw').onclick = function () {
+    t = getTournament(p.id)
+    if (!t) { showToast('比赛数据异常'); return }
     var items = t.type === 'doubles' ? (t.teams || []) : (t.players || [])
+    if (items.length < 2) { showToast('至少需要2' + (t.type === 'doubles' ? '支队伍' : '名选手')); return }
     var fmt = t.format
     t.settings = s; t.matches = []; t.knockout = null
+    if (fmt === 'nine-team') t.nineTeam = init9TeamData()
     if (fmt === 'round-robin') {
       t.groups = [{ name: 'A', members: shuffleArray(items.map(function (x) { return Object.assign({}, x) })) }]
     } else if (fmt === 'nine-team') {
@@ -731,7 +748,8 @@ function chooseImageTheme(t, type) {
   showActionSheet([
     { text: '⬜ 简约白', action: function () { exportAsImage(t, type, 'light') } },
     { text: '🟢 网球绿', action: function () { exportAsImage(t, type, 'green') } },
-    { text: '⬛ 深色模式', action: function () { exportAsImage(t, type, 'dark') } }
+    { text: '⬛ 暗夜模式', action: function () { exportAsImage(t, type, 'dark') } },
+    { text: '💜 紫罗兰', action: function () { exportAsImage(t, type, 'purple') } }
   ])
 }
 
@@ -739,15 +757,21 @@ function exportAsImage(t, type, theme) {
   var th = IMG_THEMES[theme] || IMG_THEMES.light
   var body = ''
   if (type === 'groups') {
-    ;(t.groups || []).forEach(function (g) {
-      body += '<div style="margin-bottom:12px"><div style="font-size:15px;font-weight:700;color:'+th.accent+';margin-bottom:6px">'+esc(g.name)+' 组</div>'
+    ;(t.groups || []).forEach(function (g, gi) {
+      body += '<div style="margin-bottom:16px;background:'+th.cardBg+';border-radius:12px;border:1px solid '+th.border+';overflow:hidden">'
+      body += '<div style="padding:10px 16px;background:'+th.headerBg+';display:flex;align-items:center;gap:8px"><span style="font-size:18px;font-weight:800;color:'+th.headerText+'">'+esc(g.name)+'</span><span style="font-size:12px;color:rgba(255,255,255,.7)">组 · '+g.members.length+'人</span></div>'
       g.members.forEach(function (m, i) {
-        body += '<div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid '+th.border+'">'
-        body += '<span style="width:24px;font-size:12px;color:'+th.sub+'">'+(i+1)+'</span>'
-        body += '<span style="flex:1;font-size:14px;font-weight:500">'+esc(m.name)+'</span>'
-        body += '<span style="font-size:12px;font-weight:700;color:'+th.accent+'">'+m.score+'分</span>'
-        if (m.isSeed) body += '<span style="margin-left:4px;font-size:10px;color:'+th.accent+'">★</span>'
+        var rowBg = i % 2 === 0 ? 'transparent' : th.cardBg
+        body += '<div style="display:flex;align-items:center;padding:10px 16px;background:'+rowBg+'">'
+        var rankStyle = i < 3 ? 'width:26px;height:26px;border-radius:50%;background:'+th.badge+';color:'+th.badgeText+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0' : 'width:26px;height:26px;border-radius:50%;background:'+th.cardBg+';border:1px solid '+th.border+';color:'+th.sub+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0'
+        body += '<div style="'+rankStyle+'">'+(i+1)+'</div>'
+        body += '<div style="flex:1;margin-left:12px"><div style="font-size:14px;font-weight:600;line-height:1.3">'+esc(m.name)+'</div>'
+        if (t.type === 'doubles' && m.player1 && m.player2) body += '<div style="font-size:11px;color:'+th.sub+';margin-top:2px">'+esc(m.player1.name)+' + '+esc(m.player2.name)+'</div>'
         body += '</div>'
+        body += '<div style="display:flex;align-items:center;gap:6px">'
+        body += '<span style="background:'+th.badge+';color:'+th.badgeText+';padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">'+m.score+'</span>'
+        if (m.isSeed) body += '<span style="background:'+th.tagBg+';color:'+th.tagText+';padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">种子</span>'
+        body += '</div></div>'
       })
       body += '</div>'
     })
@@ -756,24 +780,37 @@ function exportAsImage(t, type, theme) {
       var rk = compute9TeamFinalRankings(t)
       if (rk.length > 0) {
         rk.forEach(function (r) {
-          var icon = r.rank <= 3 ? ['🥇','🥈','🥉'][r.rank-1] : '#'+r.rank
-          body += '<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid '+th.border+'">'
-          body += '<span style="width:36px;font-size:16px;text-align:center">'+icon+'</span>'
-          body += '<span style="flex:1;font-size:14px;font-weight:600">'+esc(r.team.name)+'</span>'
-          body += '<span style="font-size:12px;color:'+th.sub+'">'+esc(r.label)+'</span></div>'
+          var icon = r.rank <= 3 ? ['🥇','🥈','🥉'][r.rank-1] : ''
+          var isMedal = r.rank <= 3
+          var cardStyle = isMedal ? 'background:'+th.cardBg+';border:1px solid '+th.border+';border-radius:12px;padding:14px 16px;margin-bottom:8px' : 'padding:10px 16px;margin-bottom:4px;border-bottom:1px solid '+th.border
+          body += '<div style="display:flex;align-items:center;'+cardStyle+'">'
+          if (isMedal) { body += '<span style="font-size:28px;margin-right:12px">'+icon+'</span>' }
+          else { body += '<span style="width:32px;height:32px;border-radius:50%;background:'+th.cardBg+';border:1px solid '+th.border+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+th.sub+';margin-right:12px;flex-shrink:0">'+r.rank+'</span>' }
+          body += '<div style="flex:1"><div style="font-size:'+(isMedal?'16':'14')+'px;font-weight:'+(isMedal?'800':'600')+'">'+esc(r.team.name)+'</div></div>'
+          body += '<span style="background:'+th.tagBg+';color:'+th.tagText+';padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600">'+esc(r.label)+'</span>'
+          body += '</div>'
         })
-      } else { body += '<div style="text-align:center;padding:20px;color:'+th.sub+'">比赛尚未完成</div>' }
+      } else { body += '<div style="text-align:center;padding:30px;color:'+th.sub+';font-size:14px">⏳ 比赛尚未完成</div>' }
     } else {
       ;(t.groups || []).forEach(function (g) {
         var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
         var st = calculateStandings(gm, g.members)
-        body += '<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;color:'+th.accent+';margin-bottom:6px">'+esc(g.name)+' 组排名</div>'
+        body += '<div style="margin-bottom:16px;background:'+th.cardBg+';border-radius:12px;border:1px solid '+th.border+';overflow:hidden">'
+        body += '<div style="padding:10px 16px;background:'+th.headerBg+';display:flex;align-items:center;gap:8px"><span style="font-size:16px;font-weight:800;color:'+th.headerText+'">'+esc(g.name)+' 组排名</span></div>'
+        body += '<div style="display:flex;padding:8px 16px;border-bottom:1px solid '+th.border+';font-size:11px;color:'+th.sub+';font-weight:600"><span style="width:30px">#</span><span style="flex:1">名称</span><span style="width:50px;text-align:center">战绩</span><span style="width:44px;text-align:center">净局</span><span style="width:44px;text-align:center">积分</span></div>'
         st.forEach(function (s, i) {
-          body += '<div style="display:flex;align-items:center;padding:4px 0;border-bottom:1px solid '+th.border+'">'
-          body += '<span style="width:24px;font-size:12px;color:'+th.sub+'">'+(i+1)+'</span>'
-          body += '<span style="flex:1;font-size:13px;font-weight:500">'+esc(s.name)+'</span>'
-          body += '<span style="font-size:12px;color:'+th.sub+'">'+s.wins+'胜'+s.losses+'负</span>'
-          body += '<span style="margin-left:8px;font-size:12px;font-weight:700;color:'+th.accent+'">'+s.points+'分</span></div>'
+          var net = (s.scoreFor || 0) - (s.scoreAgainst || 0)
+          var netStr = net > 0 ? '+'+net : String(net)
+          var rowBg = i % 2 === 0 ? 'transparent' : th.cardBg
+          body += '<div style="display:flex;align-items:center;padding:9px 16px;background:'+rowBg+'">'
+          var rankStyle = i < 3 ? 'width:24px;height:24px;border-radius:50%;background:'+th.badge+';color:'+th.badgeText+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800' : 'width:24px;text-align:center;font-size:12px;color:'+th.sub+';font-weight:600'
+          body += '<span style="'+rankStyle+';margin-right:6px">'+(i+1)+'</span>'
+          body += '<span style="flex:1;font-size:13px;font-weight:600">'+esc(s.name)+'</span>'
+          body += '<span style="width:50px;text-align:center;font-size:12px;color:'+th.sub+'">'+s.wins+'胜'+s.losses+'负</span>'
+          var netColor = net > 0 ? th.accent : (net < 0 ? '#FF5252' : th.sub)
+          body += '<span style="width:44px;text-align:center;font-size:12px;font-weight:700;color:'+netColor+'">'+netStr+'</span>'
+          body += '<span style="width:44px;text-align:center"><span style="background:'+th.badge+';color:'+th.badgeText+';padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">'+s.points+'</span></span>'
+          body += '</div>'
         })
         body += '</div>'
       })
