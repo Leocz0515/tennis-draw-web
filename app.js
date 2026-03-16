@@ -1,0 +1,1341 @@
+/* ========================================
+   app.js — UI, Router, All Pages
+   ======================================== */
+
+var _ps = {} // page state (preserved within same page)
+var _currentPage = '' // track current page for state reset
+var _viewer = false
+var _viewerTournament = null
+
+/* ===== UI Helpers ===== */
+function showToast(msg, duration) {
+  var el = document.getElementById('toast-container')
+  el.innerHTML = '<div class="toast">' + esc(msg) + '</div>'
+  clearTimeout(el._t)
+  el._t = setTimeout(function () { el.innerHTML = '' }, duration || 2000)
+}
+
+function showModal(opts) {
+  var root = document.getElementById('modal-root')
+  var html = '<div class="modal-mask" id="modal-mask"><div class="modal-content">'
+  html += '<div class="modal-title">' + esc(opts.title || '提示') + '</div>'
+  if (opts.content) html += '<div class="modal-body">' + esc(opts.content) + '</div>'
+  html += '<div class="modal-actions">'
+  if (opts.showCancel !== false) html += '<button class="btn-secondary" id="modal-cancel">' + esc(opts.cancelText || '取消') + '</button>'
+  html += '<button class="btn-primary" id="modal-confirm">' + esc(opts.confirmText || '确定') + '</button>'
+  html += '</div></div></div>'
+  root.innerHTML = html
+  document.getElementById('modal-confirm').onclick = function () { root.innerHTML = ''; if (opts.onConfirm) opts.onConfirm() }
+  var c = document.getElementById('modal-cancel')
+  if (c) c.onclick = function () { root.innerHTML = ''; if (opts.onCancel) opts.onCancel() }
+  document.getElementById('modal-mask').onclick = function (e) { if (e.target.id === 'modal-mask') { root.innerHTML = ''; if (opts.onCancel) opts.onCancel() } }
+}
+
+function showActionSheet(items, onCancel) {
+  var root = document.getElementById('modal-root')
+  var html = '<div class="action-sheet-mask" id="as-mask"><div class="action-sheet">'
+  items.forEach(function (it, i) { html += '<div class="action-sheet-item" data-idx="' + i + '">' + esc(it.text) + '</div>' })
+  html += '<div class="action-sheet-cancel" id="as-cancel">取消</div></div></div>'
+  root.innerHTML = html
+  root.querySelectorAll('.action-sheet-item').forEach(function (el) {
+    el.onclick = function () { root.innerHTML = ''; var idx = +el.dataset.idx; if (items[idx] && items[idx].action) items[idx].action() }
+  })
+  document.getElementById('as-cancel').onclick = function () { root.innerHTML = ''; if (onCancel) onCancel() }
+  document.getElementById('as-mask').onclick = function (e) { if (e.target.id === 'as-mask') { root.innerHTML = ''; if (onCancel) onCancel() } }
+}
+
+/* ===== Router ===== */
+var _routes = []
+function navigate(path) { _routes.push(location.hash); location.hash = path }
+function goBack() { if (_routes.length > 0) location.hash = _routes.pop(); else location.hash = '/' }
+
+function parseRoute() {
+  var h = location.hash.replace(/^#/, '') || '/'
+  var qi = h.indexOf('?'), path = qi >= 0 ? h.substring(0, qi) : h, params = {}
+  if (qi >= 0) h.substring(qi + 1).split('&').forEach(function (p) { var kv = p.split('='); if (kv.length === 2) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1]) })
+  return { path: path, params: params }
+}
+
+function render() {
+  var r = parseRoute(), app = document.getElementById('app')
+  if (!app) return
+  var html = '', page = 'home'
+  if (r.path === '/' || r.path === '') { html = renderHome(r.params); page = 'home' }
+  else if (r.path === '/create') { html = renderCreate(r.params); page = 'create' }
+  else if (r.path === '/players') { html = renderPlayers(r.params); page = 'players' }
+  else if (r.path === '/pairing') { html = renderPairing(r.params); page = 'pairing' }
+  else if (r.path === '/settings') { html = renderSettings(r.params); page = 'settings' }
+  else if (r.path === '/result') { html = renderResult(r.params); page = 'result' }
+  else if (r.path === '/schedule') { html = renderSchedule(r.params); page = 'schedule' }
+  else if (r.path === '/match') { html = renderMatch(r.params); page = 'match' }
+  else if (r.path === '/rankings') { html = renderRankings(r.params); page = 'rankings' }
+  else { html = renderHome(r.params); page = 'home' }
+  if (page !== _currentPage) _ps = {}
+  _currentPage = page
+  app.innerHTML = html
+  requestAnimationFrame(function () {
+    if (page === 'home') mountHome(r.params)
+    else if (page === 'create') mountCreate(r.params)
+    else if (page === 'players') mountPlayers(r.params)
+    else if (page === 'pairing') mountPairing(r.params)
+    else if (page === 'settings') mountSettings(r.params)
+    else if (page === 'result') mountResult(r.params)
+    else if (page === 'schedule') mountSchedule(r.params)
+    else if (page === 'match') mountMatch(r.params)
+    else if (page === 'rankings') mountRankings(r.params)
+  })
+}
+
+function _t(id) { return _viewer ? _viewerTournament : getTournament(id) }
+
+/* ===== Format Labels ===== */
+var FMT = { 'round-robin': '单循环', 'group-knockout': '小组循环+淘汰赛', 'single-knockout': '单循环+淘汰赛', 'nine-team': '9组大战赛' }
+var TYPE = { singles: '单打', doubles: '双打' }
+
+/* ====================================================================
+   PAGE: HOME
+   ==================================================================== */
+function renderHome() {
+  var ts = _viewer ? [] : getTournaments()
+  var q = (_ps.q || '').trim().toLowerCase()
+  if (q) ts = ts.filter(function (t) { return t.name.toLowerCase().includes(q) })
+  var html = '<div class="container">'
+  html += '<div class="home-header"><div class="home-title">🎾 网球赛事管理</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
+  if (!_viewer) {
+    html += '<div class="search-box"><input class="input-field" id="home-search" placeholder="搜索比赛名称..." value="' + esc(_ps.q || '') + '"></div>'
+    if (ts.length === 0 && !q) {
+      html += '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-text">还没有比赛记录</div><div class="empty-hint">点击下方按钮创建第一场比赛</div></div>'
+    } else {
+      ts.forEach(function (t) {
+        html += '<div class="card tournament-card" data-id="' + t.id + '">'
+        html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(TYPE[t.type] || '') + '</div></div>'
+        html += '<div class="tournament-meta">'
+        html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
+        if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
+        if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
+        html += '</div>'
+        html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
+        html += '<div class="share-icon" data-share="' + t.id + '" title="分享">📤</div>'
+        html += '</div>'
+      })
+    }
+    html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-new">➕ 新建比赛</button></div>'
+  }
+  html += '</div>'
+  return html
+}
+
+function mountHome() {
+  var s = document.getElementById('home-search')
+  if (s) {
+    s.oninput = function () {
+      _ps.q = s.value
+      var cursorPos = s.selectionStart
+      render()
+      var s2 = document.getElementById('home-search')
+      if (s2) { s2.focus(); s2.setSelectionRange(cursorPos, cursorPos) }
+    }
+  }
+  var btn = document.getElementById('btn-new')
+  if (btn) btn.onclick = function () { navigate('/create') }
+  document.querySelectorAll('.tournament-card').forEach(function (el) {
+    el.onclick = function (e) {
+      if (e.target.dataset.share) return
+      navigate('/result?id=' + el.dataset.id)
+    }
+    var _lt
+    el.oncontextmenu = function (e) {
+      e.preventDefault()
+      showModal({
+        title: '删除比赛', content: '确定删除这场比赛吗？此操作不可恢复。', confirmText: '删除',
+        onConfirm: function () { deleteTournament(el.dataset.id); render() }
+      })
+    }
+    el.addEventListener('touchstart', function () {
+      _lt = setTimeout(function () {
+        showModal({
+          title: '删除比赛', content: '确定删除这场比赛吗？此操作不可恢复。', confirmText: '删除',
+          onConfirm: function () { deleteTournament(el.dataset.id); render() }
+        })
+      }, 800)
+    })
+    el.addEventListener('touchend', function () { clearTimeout(_lt) })
+    el.addEventListener('touchmove', function () { clearTimeout(_lt) })
+  })
+  document.querySelectorAll('.share-icon').forEach(function (el) {
+    el.onclick = function (e) {
+      e.stopPropagation()
+      var tid = el.dataset.share
+      doShare(tid)
+    }
+  })
+}
+
+function doShare(tid) {
+  var data = generateShareData(tid)
+  if (!data) { showToast('分享失败'); return }
+  var base = location.origin + location.pathname
+  var url = base + '?share=' + data
+  if (url.length > 8000) {
+    showModal({ title: '数据过大', content: '比赛数据较大，建议使用"导出数据"功能分享。', showCancel: false })
+    return
+  }
+  showModal({
+    title: '分享比赛', content: '链接已准备好，点击确定复制到剪贴板。访客可通过此链接查看比赛数据（只读）。',
+    confirmText: '复制链接',
+    onConfirm: function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { showToast('链接已复制') }).catch(function () { fallbackCopy(url) })
+      else fallbackCopy(url)
+    }
+  })
+}
+
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'
+  document.body.appendChild(ta); ta.select()
+  try { document.execCommand('copy'); showToast('链接已复制') } catch (e) { showToast('复制失败，请手动复制') }
+  document.body.removeChild(ta)
+}
+
+/* ====================================================================
+   PAGE: CREATE
+   ==================================================================== */
+function renderCreate() {
+  _ps.type = _ps.type || 'singles'
+  _ps.format = _ps.format || 'round-robin'
+  _ps.name = _ps.name || ''
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">🏆 新建比赛</div><div style="width:40px"></div></div>'
+  html += '<div class="card"><div class="section-title mb-sm">比赛名称</div>'
+  html += '<input class="input-field" id="inp-name" placeholder="如：2025春季网球赛" value="' + esc(_ps.name) + '" maxlength="30"></div>'
+  html += '<div class="card"><div class="section-title mb-sm">比赛类型</div><div class="flex-row gap-md">'
+  html += '<div class="type-option' + (_ps.type === 'singles' ? ' type-option-active' : '') + '" data-type="singles"><div class="type-icon">🏸</div><div class="type-label">单打</div></div>'
+  html += '<div class="type-option' + (_ps.type === 'doubles' ? ' type-option-active' : '') + '" data-type="doubles"><div class="type-icon">👥</div><div class="type-label">双打</div></div>'
+  html += '</div></div>'
+  html += '<div class="card"><div class="section-title mb-sm">赛制</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+  ;[['round-robin','🔄','单循环','所有对手循环赛'],['group-knockout','🏅','小组循环+淘汰','分组循环后淘汰赛'],['single-knockout','⚡','单循环+淘汰','循环赛后淘汰赛'],['nine-team','🏆','9组大战赛','9队3组多阶段赛']].forEach(function(f){
+    html+='<div class="type-option'+(_ps.format===f[0]?' type-option-active':'')+'" data-format="'+f[0]+'" style="min-width:0"><div class="type-icon">'+f[1]+'</div><div class="type-label">'+esc(f[2])+'</div><div class="type-desc">'+esc(f[3])+'</div></div>'
+  })
+  html += '</div></div>'
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-next">下一步 →</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountCreate() {
+  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('inp-name').oninput = function () { _ps.name = this.value }
+  document.querySelectorAll('[data-type]').forEach(function (el) {
+    el.onclick = function () { _ps.type = el.dataset.type; render() }
+  })
+  document.querySelectorAll('[data-format]').forEach(function (el) {
+    el.onclick = function () { _ps.format = el.dataset.format; render() }
+  })
+  document.getElementById('btn-next').onclick = function () {
+    var name = (_ps.name || '').trim()
+    if (!name) { showToast('请输入比赛名称'); return }
+    var t = {
+      id: generateId(), name: name, type: _ps.type, format: _ps.format,
+      players: [], teams: [], groups: null, matches: [], knockout: null,
+      settings: {}, nineTeam: null, createTime: Date.now()
+    }
+    if (_ps.format === 'nine-team') t.nineTeam = init9TeamData()
+    saveTournament(t)
+    navigate('/players?id=' + t.id)
+  }
+}
+
+/* ====================================================================
+   PAGE: PLAYERS
+   ==================================================================== */
+function renderPlayers(p) {
+  var t = getTournament(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var players = (t.players || []).slice().sort(function (a, b) { return b.score - a.score })
+  var total = players.length, avg = total ? Math.round(players.reduce(function (s, p) { return s + p.score }, 0) / total) : 0
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">👤 选手管理</div><div style="width:40px"></div></div>'
+  html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">共 ' + total + ' 人 · 平均积分 ' + avg + '</div></div><div class="score-badge">' + esc(TYPE[t.type]) + '</div></div></div>'
+  if (t.format === 'nine-team' && total !== 9) html += '<div class="guide-tip">⚠️ 9组大战赛需要恰好 9 名选手/队伍</div>'
+  else if (total === 0) html += '<div class="guide-tip">💡 点击下方"添加选手"开始，或导入Excel/CSV文件</div>'
+  html += '<div class="card"><div class="section-title mb-sm">添加选手</div>'
+  html += '<div class="add-row"><input class="input-field" id="inp-pname" placeholder="姓名"><input class="input-field score-input" id="inp-pscore" placeholder="积分" type="number" min="0"><button class="btn-primary btn-mini" id="btn-add">添加</button></div>'
+  if (_ps.editId) html += '<div class="edit-hint" id="cancel-edit">当前正在编辑，点此取消</div>'
+  html += '</div>'
+  html += '<div class="card"><div class="flex-between mb-sm"><div class="section-title">选手列表</div><div class="flex-row gap-sm">'
+  html += '<button class="btn-secondary btn-mini" id="btn-import">📥 导入</button>'
+  html += '<button class="btn-danger btn-mini" id="btn-clear-all" style="font-size:12px">清空</button>'
+  html += '</div></div>'
+  if (players.length === 0) {
+    html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">📋</div><div class="empty-text">暂无选手</div></div>'
+  } else {
+    players.forEach(function (pl, idx) {
+      html += '<div class="player-item" data-pid="' + pl.id + '">'
+      html += '<div class="rank' + (idx < 3 ? ' top3' : '') + '">' + (idx + 1) + '</div>'
+      html += '<div class="player-name-text">' + esc(pl.name) + '</div>'
+      html += '<div class="player-actions">'
+      html += '<div class="score-badge">' + pl.score + '</div>'
+      html += '<button class="btn-icon" data-edit="' + pl.id + '" title="编辑">✏️</button>'
+      html += '<button class="btn-icon" data-del="' + pl.id + '" title="删除">🗑️</button>'
+      html += '</div></div>'
+    })
+  }
+  html += '</div>'
+  var nextLabel = t.type === 'doubles' ? '下一步：组队 →' : '下一步：抽签设置 →'
+  var disabled = (t.format === 'nine-team' && total !== 9) || total < 2
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (disabled ? ' btn-disabled' : '') + '" id="btn-next">' + nextLabel + '</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountPlayers(p) {
+  document.getElementById('btn-back').onclick = function () { goBack() }
+  var t = getTournament(p.id)
+  if (!t) return
+
+  document.getElementById('btn-add').onclick = function () {
+    var nm = document.getElementById('inp-pname').value.trim()
+    var sc = parseInt(document.getElementById('inp-pscore').value) || 0
+    if (!nm) { showToast('请输入姓名'); return }
+    if (sc < 0) sc = 0
+    if (!_ps.editId) {
+      if (t.players.some(function (x) { return x.name === nm })) { showToast('选手已存在'); return }
+      t.players.push({ id: generateId(), name: nm, score: sc })
+    } else {
+      var pl = t.players.find(function (x) { return x.id === _ps.editId })
+      if (pl) { pl.name = nm; pl.score = sc }
+      _ps.editId = null
+    }
+    saveTournament(t); render()
+  }
+
+  var ce = document.getElementById('cancel-edit')
+  if (ce) ce.onclick = function () { _ps.editId = null; render() }
+
+  document.querySelectorAll('[data-edit]').forEach(function (el) {
+    el.onclick = function (e) {
+      e.stopPropagation()
+      var pl = t.players.find(function (x) { return x.id === el.dataset.edit })
+      if (pl) {
+        _ps.editId = pl.id
+        document.getElementById('inp-pname').value = pl.name
+        document.getElementById('inp-pscore').value = pl.score
+        document.getElementById('btn-add').textContent = '保存'
+      }
+    }
+  })
+  document.querySelectorAll('[data-del]').forEach(function (el) {
+    el.onclick = function (e) {
+      e.stopPropagation()
+      showModal({
+        title: '删除选手', content: '确定删除该选手？',
+        onConfirm: function () { t.players = t.players.filter(function (x) { return x.id !== el.dataset.del }); saveTournament(t); render() }
+      })
+    }
+  })
+
+  document.getElementById('btn-import').onclick = function () {
+    var fi = document.getElementById('file-input')
+    fi.onchange = function () {
+      var file = fi.files[0]; if (!file) return
+      if (file.name.match(/\.(xlsx|xls)$/i)) {
+        var reader = new FileReader()
+        reader.onload = function (e) {
+          var ps = parseExcel(e.target.result)
+          if (ps.length === 0) { showToast('未识别到有效数据'); return }
+          ps.forEach(function (np) { if (!t.players.some(function (x) { return x.name === np.name })) t.players.push(np) })
+          saveTournament(t); showToast('导入 ' + ps.length + ' 名选手'); render()
+        }
+        reader.readAsArrayBuffer(file)
+      } else {
+        var reader = new FileReader()
+        reader.onload = function (e) {
+          var ps = parseCSV(e.target.result)
+          if (ps.length === 0) { showToast('未识别到有效数据'); return }
+          ps.forEach(function (np) { if (!t.players.some(function (x) { return x.name === np.name })) t.players.push(np) })
+          saveTournament(t); showToast('导入 ' + ps.length + ' 名选手'); render()
+        }
+        reader.readAsText(file)
+      }
+      fi.value = ''
+    }
+    fi.click()
+  }
+
+  var ca = document.getElementById('btn-clear-all')
+  if (ca) ca.onclick = function () {
+    showModal({ title: '清空选手', content: '确定清空所有选手吗？', onConfirm: function () { t.players = []; saveTournament(t); render() } })
+  }
+
+  document.getElementById('btn-next').onclick = function () {
+    if (t.format === 'nine-team' && t.players.length !== 9) { showToast('9组大战赛需要恰好9名选手'); return }
+    if (t.players.length < 2) { showToast('至少需要2名选手'); return }
+    if (t.type === 'doubles') navigate('/pairing?id=' + t.id)
+    else navigate('/settings?id=' + t.id)
+  }
+}
+
+/* ====================================================================
+   PAGE: PAIRING (Doubles)
+   ==================================================================== */
+function renderPairing(p) {
+  var t = getTournament(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var teams = t.teams || [], pairedIds = new Set()
+  teams.forEach(function (tm) { pairedIds.add(tm.player1.id); pairedIds.add(tm.player2.id) })
+  var unpaired = t.players.filter(function (x) { return !pairedIds.has(x.id) }).sort(function (a, b) { return b.score - a.score })
+  var selected = _ps.selectedId || null
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">👥 双打组队</div><div style="width:40px"></div></div>'
+  html += '<div class="action-bar">'
+  html += '<button class="btn-secondary btn-mini" id="btn-rand-pair">🎲 随机组队</button>'
+  html += '<button class="btn-secondary btn-mini" id="btn-smart-pair">🧠 智能组队</button>'
+  html += '<button class="btn-danger btn-mini" id="btn-clear-pairs">🔄 全部解散</button>'
+  html += '</div>'
+
+  html += '<div class="section-header"><div class="section-title text-sm">未配对选手 <span class="section-count">(' + unpaired.length + ')</span></div></div>'
+  if (unpaired.length === 0) html += '<div class="text-center text-hint" style="padding:10px">所有选手已配对</div>'
+  unpaired.forEach(function (pl) {
+    var isSel = selected === pl.id
+    html += '<div class="player-card' + (isSel ? ' player-selected' : '') + '" data-pair="' + pl.id + '">'
+    html += '<div class="player-info"><span class="player-name-text">' + esc(pl.name) + '</span><span class="score-badge">' + pl.score + '</span></div>'
+    html += '<div class="pair-btn">+</div></div>'
+  })
+  if (unpaired.length % 2 === 1 && unpaired.length > 0) html += '<div class="bye-card">⚠️ 奇数选手，将有一人轮空</div>'
+
+  html += '<div class="section-header"><div class="section-title text-sm">已配对队伍 <span class="section-count">(' + teams.length + ')</span></div></div>'
+  if (teams.length === 0) html += '<div class="text-center text-hint" style="padding:10px">点击选手"+"按钮进行手动配对</div>'
+  teams.forEach(function (tm) {
+    html += '<div class="team-card"><div class="flex-between"><div class="team-name-text">' + esc(tm.name) + '</div><div class="flex-row gap-sm"><div class="score-badge">' + tm.score + '</div><span class="disband-btn" data-disband="' + tm.id + '">解散</span></div></div>'
+    html += '<div class="team-detail">' + esc(tm.player1.name) + '(' + tm.player1.score + ') + ' + esc(tm.player2.name) + '(' + tm.player2.score + ')</div></div>'
+  })
+
+  var disabled = teams.length < 1 || (t.format === 'nine-team' && teams.length !== 9)
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (disabled ? ' btn-disabled' : '') + '" id="btn-next">下一步：抽签设置 →</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountPairing(p) {
+  var t = getTournament(p.id); if (!t) return
+  document.getElementById('btn-back').onclick = function () { goBack() }
+
+  document.querySelectorAll('[data-pair]').forEach(function (el) {
+    el.onclick = function () {
+      var pid = el.dataset.pair
+      if (!_ps.selectedId) { _ps.selectedId = pid; render() }
+      else if (_ps.selectedId === pid) { _ps.selectedId = null; render() }
+      else {
+        var p1 = t.players.find(function (x) { return x.id === _ps.selectedId })
+        var p2 = t.players.find(function (x) { return x.id === pid })
+        if (p1 && p2) {
+          t.teams = t.teams || []
+          t.teams.push({ id: 'team_' + Date.now(), player1: { id: p1.id, name: p1.name, score: p1.score }, player2: { id: p2.id, name: p2.name, score: p2.score }, score: p1.score + p2.score, name: p1.name + '/' + p2.name })
+          saveTournament(t)
+        }
+        _ps.selectedId = null; render()
+      }
+    }
+  })
+
+  document.querySelectorAll('[data-disband]').forEach(function (el) {
+    el.onclick = function () {
+      t.teams = t.teams.filter(function (x) { return x.id !== el.dataset.disband })
+      saveTournament(t); render()
+    }
+  })
+
+  document.getElementById('btn-rand-pair').onclick = function () {
+    var pairedIds = new Set(); (t.teams || []).forEach(function (tm) { pairedIds.add(tm.player1.id); pairedIds.add(tm.player2.id) })
+    var avail = t.players.filter(function (x) { return !pairedIds.has(x.id) })
+    var res = randomPairFn(avail)
+    t.teams = (t.teams || []).concat(res.teams)
+    saveTournament(t); _ps.selectedId = null; render()
+    showToast('随机组队完成')
+  }
+  document.getElementById('btn-smart-pair').onclick = function () {
+    var pairedIds = new Set(); (t.teams || []).forEach(function (tm) { pairedIds.add(tm.player1.id); pairedIds.add(tm.player2.id) })
+    var avail = t.players.filter(function (x) { return !pairedIds.has(x.id) })
+    var res = smartPairFn(avail)
+    t.teams = (t.teams || []).concat(res.teams)
+    saveTournament(t); _ps.selectedId = null; render()
+    showToast('智能组队完成')
+  }
+  document.getElementById('btn-clear-pairs').onclick = function () {
+    showModal({ title: '全部解散', content: '确定解散所有队伍？', onConfirm: function () { t.teams = []; saveTournament(t); render() } })
+  }
+  document.getElementById('btn-next').onclick = function () {
+    if (t.teams.length < 1) { showToast('至少组成一队'); return }
+    navigate('/settings?id=' + t.id)
+  }
+}
+
+/* ====================================================================
+   PAGE: SETTINGS
+   ==================================================================== */
+function renderSettings(p) {
+  var t = getTournament(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var items = t.type === 'doubles' ? (t.teams || []) : (t.players || [])
+  var itemCount = items.length, isD = t.type === 'doubles', fmt = t.format
+  var s = t.settings || {}
+  if (!s.drawMethod) s.drawMethod = 'snake'
+  if (!s.seedCount) s.seedCount = 0
+  if (!s.groupCount && fmt === 'group-knockout') s.groupCount = Math.min(4, Math.floor(itemCount / 2))
+  if (!s.qualifyCount && fmt === 'group-knockout') s.qualifyCount = 2
+  if (!s.koTeamCount && fmt === 'single-knockout') s.koTeamCount = 4
+  if (!s.koRule && fmt === 'single-knockout') s.koRule = 'cross'
+  if (typeof s.hasThirdPlace === 'undefined') s.hasThirdPlace = true
+  _ps.settings = s
+
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">⚙️ 抽签设置</div><div style="width:40px"></div></div>'
+  html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + itemCount + (isD ? ' 队' : ' 人') + ' · ' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div></div>'
+
+  if (fmt === 'round-robin') {
+    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">单循环赛无需分组，所有' + (isD ? '队伍' : '选手') + '进行循环赛。</div></div>'
+  } else if (fmt === 'nine-team') {
+    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">自动分为3组，每组3队。经过小组赛→6强赛→复活赛→半决赛→决赛决出1-9名。</div></div>'
+  } else if (fmt === 'group-knockout') {
+    html += '<div class="card"><div class="section-title mb-sm">📊 分组设置</div>'
+    html += '<div class="method-input-row"><span class="seed-label">组数</span><input class="input-field method-input" id="inp-gc" type="number" min="2" value="' + (s.groupCount || 2) + '"><span class="text-sm text-hint ml-sm">每组约 ' + Math.ceil(itemCount / (s.groupCount || 2)) + (isD ? '队' : '人') + '</span></div>'
+    html += '<div class="method-input-row mt-sm"><span class="seed-label">每组出线</span><input class="input-field method-input" id="inp-qc" type="number" min="1" max="4" value="' + (s.qualifyCount || 2) + '"><span class="text-sm text-hint ml-sm">' + (isD ? '队' : '人') + '</span></div>'
+    html += '<div class="flex-between mt-sm"><span class="text-sm">三四名决赛</span><label class="toggle"><input type="checkbox" id="chk-tp"' + (s.hasThirdPlace ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>'
+    html += '</div>'
+  } else if (fmt === 'single-knockout') {
+    html += '<div class="card"><div class="section-title mb-sm">📊 淘汰赛设置</div>'
+    html += '<div class="method-input-row"><span class="seed-label">参与淘汰赛</span><select class="input-field method-input" id="sel-kc"><option value="2"' + (s.koTeamCount == 2 ? ' selected' : '') + '>2</option><option value="4"' + (s.koTeamCount == 4 ? ' selected' : '') + '>4</option></select><span class="text-sm text-hint ml-sm">' + (isD ? '队' : '人') + '</span></div>'
+    if ((s.koTeamCount || 4) == 4) {
+      html += '<div class="section-title text-sm mt-md mb-sm">对阵规则</div>'
+      html += '<div class="draw-options">'
+      html += '<div class="draw-option' + (s.koRule === 'cross' ? ' active' : '') + '" data-rule="cross"><div class="draw-option-title">交叉淘汰</div><div class="draw-option-desc">1v4, 2v3</div></div>'
+      html += '<div class="draw-option' + (s.koRule === 'direct' ? ' active' : '') + '" data-rule="direct"><div class="draw-option-title">直接决赛</div><div class="draw-option-desc">1v2, 3v4</div></div>'
+      html += '</div>'
+    }
+    html += '<div class="flex-between mt-sm"><span class="text-sm">三四名决赛</span><label class="toggle"><input type="checkbox" id="chk-tp"' + (s.hasThirdPlace ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>'
+    html += '</div>'
+  }
+
+  if (fmt !== 'round-robin') {
+    html += '<div class="card"><div class="section-title mb-sm">🎯 抽签方式</div>'
+    html += '<div class="draw-options">'
+    html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">🐍 蛇形分组</div><div class="draw-option-desc">按积分排序蛇形分配</div></div>'
+    html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机抽签</div><div class="draw-option-desc">种子固定后随机分配</div></div>'
+    html += '</div></div>'
+
+    html += '<div class="card"><div class="section-title mb-sm">⭐ 种子设置</div>'
+    html += '<div class="seed-row"><span class="seed-label">种子数量</span><input class="input-field seed-input" id="inp-seed" type="number" min="0" max="' + itemCount + '" value="' + (s.seedCount || 0) + '"><span class="text-sm text-hint ml-sm">前N名为种子</span></div></div>'
+  }
+
+  html += '<div class="bottom-bar"><button class="btn-accent btn-block" id="btn-draw">🎾 开始抽签</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountSettings(p) {
+  var t = getTournament(p.id); if (!t) return
+  var s = _ps.settings || t.settings || {}
+  document.getElementById('btn-back').onclick = function () { goBack() }
+
+  var gc = document.getElementById('inp-gc')
+  if (gc) gc.oninput = function () { s.groupCount = Math.max(2, parseInt(gc.value) || 2); t.settings = s; saveTournament(t); render() }
+  var qc = document.getElementById('inp-qc')
+  if (qc) qc.oninput = function () { s.qualifyCount = Math.max(1, Math.min(4, parseInt(qc.value) || 2)); t.settings = s; saveTournament(t) }
+  var kc = document.getElementById('sel-kc')
+  if (kc) kc.onchange = function () { s.koTeamCount = parseInt(kc.value); t.settings = s; saveTournament(t); render() }
+  var tp = document.getElementById('chk-tp')
+  if (tp) tp.onchange = function () { s.hasThirdPlace = tp.checked; t.settings = s; saveTournament(t) }
+
+  document.querySelectorAll('[data-rule]').forEach(function (el) {
+    el.onclick = function () { s.koRule = el.dataset.rule; t.settings = s; saveTournament(t); render() }
+  })
+  document.querySelectorAll('[data-dm]').forEach(function (el) {
+    el.onclick = function () { s.drawMethod = el.dataset.dm; t.settings = s; saveTournament(t); render() }
+  })
+  var sd = document.getElementById('inp-seed')
+  if (sd) sd.oninput = function () { s.seedCount = Math.max(0, parseInt(sd.value) || 0); t.settings = s; saveTournament(t) }
+
+  document.getElementById('btn-draw').onclick = function () {
+    var items = t.type === 'doubles' ? (t.teams || []) : (t.players || [])
+    var fmt = t.format
+    t.settings = s; t.matches = []; t.knockout = null
+    if (fmt === 'round-robin') {
+      t.groups = [{ name: 'A', members: shuffleArray(items.map(function (x) { return Object.assign({}, x) })) }]
+    } else if (fmt === 'nine-team') {
+      var gc = 3, sc = Math.min(s.seedCount || 0, items.length)
+      t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+    } else if (fmt === 'group-knockout') {
+      var gc = s.groupCount || 2, sc = Math.min(s.seedCount || 0, items.length)
+      t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+    } else if (fmt === 'single-knockout') {
+      t.groups = [{ name: 'A', members: (s.drawMethod === 'random' ? shuffleArray(items) : items.slice().sort(function (a, b) { return b.score - a.score })).map(function (x) { return Object.assign({}, x) }) }]
+    }
+    saveTournament(t)
+    showToast('抽签完成！')
+    navigate('/result?id=' + t.id)
+  }
+}
+
+/* ====================================================================
+   PAGE: RESULT
+   ==================================================================== */
+function renderResult(p) {
+  var t = _t(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t.groups) return '<div class="container"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">尚未完成抽签</div></div></div>'
+  var isD = t.type === 'doubles', fmt = t.format
+  var expanded = _ps.expanded || {}
+  var html = '<div class="container">'
+  if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📋 分组结果</div><div style="width:40px"></div></div>'
+  html += '<div class="card header-card"><div class="header-name">' + esc(t.name) + '</div>'
+  html += '<div class="header-summary">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt])
+  var totalMembers = 0; t.groups.forEach(function (g) { totalMembers += g.members.length })
+  html += ' · ' + t.groups.length + '组 · ' + totalMembers + (isD ? '队' : '人') + '</div></div>'
+
+  t.groups.forEach(function (g) {
+    var exp = expanded[g.name] !== false
+    html += '<div class="group-card"><div class="group-header" data-gname="' + g.name + '"><div><span class="group-name-label">' + esc(g.name) + ' 组</span><span class="group-count-label">(' + g.members.length + (isD ? '队' : '人') + ')</span></div><div class="group-arrow' + (exp ? ' expanded' : '') + '">▼</div></div>'
+    if (exp) {
+      html += '<div class="group-body">'
+      g.members.forEach(function (m, idx) {
+        html += '<div class="member-item"><div class="member-rank">' + (idx + 1) + '</div><div class="member-info"><div class="member-name-text">' + esc(m.name) + '</div>'
+        if (isD && m.player1 && m.player2) html += '<div class="member-detail">' + esc(m.player1.name) + '(' + m.player1.score + ') + ' + esc(m.player2.name) + '(' + m.player2.score + ')</div>'
+        html += '</div><div class="member-badges"><span class="score-badge">' + m.score + '</span>'
+        if (m.isSeed) html += '<span class="seed-badge">种子</span>'
+        html += '</div></div>'
+      })
+      html += '</div>'
+    }
+    html += '</div>'
+  })
+
+  if (!_viewer) {
+    html += '<div class="bottom-actions"><div class="action-row">'
+    html += '<button class="btn-primary" id="btn-gen-schedule">📅 生成赛程</button>'
+    html += '<button class="btn-accent" id="btn-share">📤 分享</button></div>'
+    html += '<div class="action-row">'
+    html += '<button class="btn-secondary" id="btn-export">💾 导出</button>'
+    html += '<button class="btn-secondary" id="btn-redraw">🔄 重新抽签</button></div></div>'
+  }
+  html += '</div>'
+  return html
+}
+
+function mountResult(p) {
+  var t = _t(p.id); if (!t || !t.groups) return
+  _ps.expanded = _ps.expanded || {}
+  document.getElementById('btn-back').onclick = function () { _viewer ? null : goBack() }
+
+  document.querySelectorAll('.group-header').forEach(function (el) {
+    el.onclick = function () {
+      var gn = el.dataset.gname
+      _ps.expanded[gn] = _ps.expanded[gn] === false ? true : false
+      render()
+    }
+  })
+
+  if (_viewer) return
+
+  var gs = document.getElementById('btn-gen-schedule')
+  if (gs) gs.onclick = function () {
+    t = getTournament(p.id)
+    t.matches = generateAllGroupMatches(t.groups)
+    if (t.format === 'nine-team') {
+      t.nineTeam = t.nineTeam || init9TeamData()
+      t.nineTeam.stageStatus.group = 'in_progress'
+      var thirdTeams = []
+      t.groups.forEach(function (g) { if (g.members.length >= 3) thirdTeams.push(g.members[g.members.length - 1]) })
+    }
+    saveTournament(t)
+    showToast('赛程已生成'); navigate('/schedule?id=' + t.id)
+  }
+  var sh = document.getElementById('btn-share')
+  if (sh) sh.onclick = function () { doShare(p.id) }
+  var ex = document.getElementById('btn-export')
+  if (ex) ex.onclick = function () { doExport(t) }
+  var rd = document.getElementById('btn-redraw')
+  if (rd) rd.onclick = function () {
+    showModal({
+      title: '重新抽签', content: '重新抽签将清空已录入的比分和赛程，是否继续？',
+      onConfirm: function () { navigate('/settings?id=' + t.id) }
+    })
+  }
+}
+
+function doExport(t) {
+  showActionSheet([
+    { text: '📋 导出分组名单', action: function () { exportGroupList(t) } },
+    { text: '📅 导出赛程表', action: function () { exportSchedule(t) } },
+    { text: '📊 导出比分表', action: function () { exportScores(t) } },
+    { text: '🏆 导出排名', action: function () { exportRankings(t) } },
+    { text: '📝 复制文字结果', action: function () { copyTextResult(t) } }
+  ])
+}
+
+function exportGroupList(t) {
+  var rows = []
+  ;(t.groups || []).forEach(function (g) {
+    g.members.forEach(function (m, i) { rows.push([g.name + '组', i + 1, m.name, m.score, m.isSeed ? '种子' : '']) })
+  })
+  exportToExcel(['组别', '序号', '名称', '积分', '种子'], rows, t.name + '_分组名单.xlsx')
+  showToast('导出成功')
+}
+
+function exportSchedule(t) {
+  var rows = []
+  ;(t.matches || []).forEach(function (m, i) {
+    rows.push([i + 1, m.stage || '循环赛', m.groupName || m.matchLabel || '', m.team1 ? m.team1.name : 'TBD', m.team2 ? m.team2.name : 'TBD', m.status === 'finished' ? '已完成' : '未完成'])
+  })
+  exportToExcel(['序号', '阶段', '组/轮次', '队伍1', '队伍2', '状态'], rows, t.name + '_赛程表.xlsx')
+  showToast('导出成功')
+}
+
+function exportScores(t) {
+  var rows = []
+  ;(t.matches || []).filter(function (m) { return m.status === 'finished' }).forEach(function (m, i) {
+    var wn = m.winnerId ? (m.team1.id === m.winnerId ? m.team1.name : m.team2.name) : ''
+    rows.push([i + 1, m.stage || '', m.team1.name, m.score1 || '', m.team2.name, m.score2 || '', wn])
+  })
+  exportToExcel(['序号', '阶段', '队伍1', '比分1', '队伍2', '比分2', '胜者'], rows, t.name + '_比分表.xlsx')
+  showToast('导出成功')
+}
+
+function exportRankings(t) {
+  var rows = []
+  if (t.format === 'nine-team') {
+    var rk = compute9TeamFinalRankings(t)
+    rk.forEach(function (r) { rows.push([r.rank, r.team.name, r.label]) })
+    exportToExcel(['名次', '队伍', '称号'], rows, t.name + '_最终排名.xlsx')
+  } else {
+    (t.groups || []).forEach(function (g) {
+      var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
+      var st = calculateStandings(gm, g.members)
+      st.forEach(function (s, i) { rows.push([g.name + '组', i + 1, s.name, s.wins, s.losses, s.points]) })
+    })
+    exportToExcel(['组别', '排名', '名称', '胜场', '负场', '积分'], rows, t.name + '_排名.xlsx')
+  }
+  showToast('导出成功')
+}
+
+function copyTextResult(t) {
+  var text = groupsToText(t)
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { showToast('已复制到剪贴板') })
+  else { fallbackCopy(text); showToast('已复制') }
+}
+
+/* ====================================================================
+   PAGE: SCHEDULE
+   ==================================================================== */
+function renderSchedule(p) {
+  var t = _t(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var fmt = t.format, matches = t.matches || []
+  var html = '<div class="container">'
+  if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📅 赛程</div><button class="btn-icon" id="btn-rankings">🏆</button></div>'
+
+  if (fmt === 'nine-team') {
+    html += render9TeamSchedule(t)
+  } else if (fmt === 'group-knockout') {
+    html += renderGroupKnockoutSchedule(t)
+  } else if (fmt === 'single-knockout') {
+    html += renderSingleKnockoutSchedule(t)
+  } else {
+    html += renderRoundRobinSchedule(t)
+  }
+
+  html += '</div>'
+  return html
+}
+
+function renderRoundRobinSchedule(t) {
+  var matches = (t.matches || []).filter(function (m) { return m.stage === 'group' })
+  var groups = t.groups || []
+  var curGroup = _ps.curGroup || (groups[0] ? groups[0].name : 'A')
+  var html = ''
+  if (groups.length > 1) {
+    html += '<div class="group-selector">'
+    groups.forEach(function (g) {
+      html += '<div class="group-btn' + (curGroup === g.name ? ' active' : '') + '" data-grp="' + g.name + '">' + g.name + '组</div>'
+    })
+    html += '</div>'
+  }
+  var gm = matches.filter(function (m) { return m.groupName === curGroup })
+  html += renderMatchList(gm, t)
+  return html
+}
+
+function renderGroupKnockoutSchedule(t) {
+  var curTab = _ps.curTab || 'group'
+  var html = '<div class="tab-bar">'
+  html += '<div class="tab-item' + (curTab === 'group' ? ' active' : '') + '" data-tab="group">小组赛</div>'
+  html += '<div class="tab-item' + (curTab === 'knockout' ? ' active' : '') + '" data-tab="knockout">淘汰赛</div>'
+  html += '</div>'
+
+  if (curTab === 'group') {
+    var groups = t.groups || []
+    var curGroup = _ps.curGroup || (groups[0] ? groups[0].name : 'A')
+    if (groups.length > 1) {
+      html += '<div class="group-selector">'
+      groups.forEach(function (g) {
+        html += '<div class="group-btn' + (curGroup === g.name ? ' active' : '') + '" data-grp="' + g.name + '">' + g.name + '组</div>'
+      })
+      html += '</div>'
+    }
+    var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === curGroup })
+    html += renderMatchList(gm, t)
+
+    var allGroupDone = (t.matches || []).filter(function (m) { return m.stage === 'group' }).every(function (m) { return m.status === 'finished' })
+    if (allGroupDone && !t.knockout && !_viewer) {
+      html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-ko">🏅 生成淘汰赛</button></div>'
+    }
+  } else {
+    html += renderKnockoutBracket(t)
+  }
+  return html
+}
+
+function renderSingleKnockoutSchedule(t) {
+  var curTab = _ps.curTab || 'group'
+  var html = '<div class="tab-bar">'
+  html += '<div class="tab-item' + (curTab === 'group' ? ' active' : '') + '" data-tab="group">循环赛</div>'
+  html += '<div class="tab-item' + (curTab === 'knockout' ? ' active' : '') + '" data-tab="knockout">淘汰赛</div>'
+  html += '</div>'
+
+  if (curTab === 'group') {
+    var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
+    html += renderMatchList(gm, t)
+    var allDone = gm.length > 0 && gm.every(function (m) { return m.status === 'finished' })
+    if (allDone && !t.knockout && !_viewer) {
+      html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-ko">🏅 生成淘汰赛</button></div>'
+    }
+  } else {
+    html += renderKnockoutBracket(t)
+  }
+  return html
+}
+
+function render9TeamSchedule(t) {
+  var nt = t.nineTeam || init9TeamData()
+  var stages = [
+    { key: 'group', label: '小组赛' }, { key: 'round6', label: '6强赛' },
+    { key: 'revival', label: '复活赛' }, { key: 'semi', label: '半决赛' },
+    { key: 'final', label: '决赛' }, { key: 'ranking', label: '排位赛' }
+  ]
+  var curStage = _ps.curStage || 'group'
+  var html = '<div class="stage-tabs">'
+  stages.forEach(function (s) {
+    var status = nt.stageStatus[s.key] || 'pending'
+    var cls = 'stage-tab' + (curStage === s.key ? ' active' : '') + (status === 'completed' ? ' completed' : '')
+    html += '<div class="' + cls + '" data-stage="' + s.key + '">' + esc(s.label) + '</div>'
+  })
+  html += '</div>'
+
+  if (curStage === 'group') {
+    var groups = t.groups || []
+    var curGroup = _ps.curGroup || 'A'
+    html += '<div class="group-selector">'
+    groups.forEach(function (g) {
+      html += '<div class="group-btn' + (curGroup === g.name ? ' active' : '') + '" data-grp="' + g.name + '">' + g.name + '组</div>'
+    })
+    html += '</div>'
+    var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === curGroup })
+    html += renderMatchList(gm, t)
+    var allGroupDone = is9TeamStageComplete(t, 'group')
+    if (allGroupDone && !_viewer) {
+      var hasR6 = get9TeamStageMatches(t, 'round6').length > 0
+      if (!hasR6) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-r6">⚡ 生成6强赛对阵</button></div>'
+      var hasRanking = get9TeamStageMatches(t, 'ranking').length > 0
+      if (!hasRanking) html += '<div class="text-center mt-sm"><button class="btn-secondary btn-mini" id="btn-gen-ranking">🏅 生成排位赛(7-9名)</button></div>'
+    }
+  } else if (curStage === 'round6') {
+    var r6m = get9TeamStageMatches(t, 'round6')
+    if (r6m.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成小组赛</div></div>'
+    else {
+      html += renderMatchList(r6m, t)
+      var r6Done = is9TeamStageComplete(t, 'round6')
+      if (r6Done && !_viewer) {
+        var hasRevival = get9TeamStageMatches(t, 'revival').length > 0
+        if (!hasRevival) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-revival">🔄 生成复活赛</button></div>'
+      }
+    }
+  } else if (curStage === 'revival') {
+    var rvm = get9TeamStageMatches(t, 'revival')
+    if (rvm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成6强赛</div></div>'
+    else {
+      html += '<div class="guide-tip">💡 复活赛采用抢7制</div>'
+      html += renderMatchList(rvm, t)
+      var rvDone = is9TeamStageComplete(t, 'revival')
+      if (rvDone && !_viewer) {
+        var hasSemi = get9TeamStageMatches(t, 'semi').length > 0
+        if (!hasSemi) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-draw-semi">🎲 半决赛抽签</button></div>'
+      }
+    }
+  } else if (curStage === 'semi') {
+    var sm = get9TeamStageMatches(t, 'semi')
+    if (sm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成复活赛并进行半决赛抽签</div></div>'
+    else {
+      html += renderMatchList(sm, t)
+      var semiDone = is9TeamStageComplete(t, 'semi')
+      if (semiDone && !_viewer) {
+        var hasFinal = get9TeamStageMatches(t, 'final').length > 0
+        if (!hasFinal) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-finals">🏆 生成决赛</button></div>'
+      }
+    }
+  } else if (curStage === 'final') {
+    var fm = (t.matches || []).filter(function (m) { return m.stage === 'final' || m.stage === 'third' })
+    if (fm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成半决赛</div></div>'
+    else html += renderMatchList(fm, t)
+  } else if (curStage === 'ranking') {
+    var rkm = get9TeamStageMatches(t, 'ranking')
+    if (rkm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">小组赛完成后生成排位赛</div></div>'
+    else html += renderMatchList(rkm, t)
+  }
+  return html
+}
+
+function renderMatchList(matches, t) {
+  if (matches.length === 0) return '<div class="text-center text-hint" style="padding:15px">暂无比赛</div>'
+  var html = ''
+  matches.forEach(function (m) {
+    var statusClass = m.status === 'finished' ? 'finished' : 'pending'
+    html += '<div class="match-card ' + statusClass + '" data-mid="' + m.id + '">'
+    if (m.matchLabel) html += '<div class="match-round">' + esc(m.matchLabel) + '</div>'
+    else if (m.round) html += '<div class="match-round">第 ' + m.round + ' 轮' + (m.groupName ? ' · ' + m.groupName + '组' : '') + '</div>'
+    html += '<div class="match-teams">'
+    html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team1 ? m.team1.id : '') ? ' winner' : '') + (m.team1 ? '' : ' tbd') + '">' + (m.team1 ? esc(m.team1.name) : 'TBD') + '</div></div>'
+    html += '<div class="match-vs">' + (m.status === 'finished' ? (m.score1 || '0') + ' : ' + (m.score2 || '0') : 'VS') + '</div>'
+    html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team2 ? m.team2.id : '') ? ' winner' : '') + (m.team2 ? '' : ' tbd') + '">' + (m.team2 ? esc(m.team2.name) : 'TBD') + '</div></div>'
+    html += '</div>'
+    if (m.status === 'finished') html += '<div class="match-status"><span class="tag tag-green">已完成</span></div>'
+    else html += '<div class="match-status"><span class="tag tag-orange">' + (m.team1 && m.team2 ? '待比赛' : '等待中') + '</span></div>'
+    html += '</div>'
+  })
+  return html
+}
+
+function renderKnockoutBracket(t) {
+  if (!t.knockout || t.knockout.length === 0) return '<div class="text-center text-hint" style="padding:20px">淘汰赛尚未生成</div>'
+  var html = ''
+  t.knockout.forEach(function (round, ri) {
+    html += '<div class="round-header">' + esc(round.roundName) + '</div>'
+    round.matches.forEach(function (m, mi) {
+      html += '<div class="ko-match-card" data-kori="' + ri + '" data-komi="' + mi + '">'
+      html += '<div class="ko-teams">'
+      html += '<div class="ko-team' + (m.winnerId && m.team1 && m.winnerId === m.team1.id ? ' winner' : '') + (m.team1 ? '' : ' tbd') + '">' + (m.team1 ? esc(m.team1.name) : '待定') + '</div>'
+      html += '<div class="ko-vs">' + (m.status === 'finished' ? (m.score1 || '0') + ':' + (m.score2 || '0') : 'VS') + '</div>'
+      html += '<div class="ko-team' + (m.winnerId && m.team2 && m.winnerId === m.team2.id ? ' winner' : '') + (m.team2 ? '' : ' tbd') + '">' + (m.team2 ? esc(m.team2.name) : '待定') + '</div>'
+      html += '</div></div>'
+    })
+  })
+  return html
+}
+
+function mountSchedule(p) {
+  var t = _t(p.id); if (!t) return
+  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('btn-rankings').onclick = function () { navigate('/rankings?id=' + p.id) }
+
+  document.querySelectorAll('[data-tab]').forEach(function (el) {
+    el.onclick = function () { _ps.curTab = el.dataset.tab; render() }
+  })
+  document.querySelectorAll('[data-stage]').forEach(function (el) {
+    el.onclick = function () { _ps.curStage = el.dataset.stage; render() }
+  })
+  document.querySelectorAll('[data-grp]').forEach(function (el) {
+    el.onclick = function () { _ps.curGroup = el.dataset.grp; render() }
+  })
+
+  if (!_viewer) {
+    document.querySelectorAll('.match-card').forEach(function (el) {
+      el.onclick = function () {
+        var mid = el.dataset.mid
+        var m = (t.matches || []).find(function (x) { return x.id === mid })
+        if (m && m.team1 && m.team2) navigate('/match?id=' + p.id + '&matchId=' + mid)
+      }
+    })
+    document.querySelectorAll('.ko-match-card').forEach(function (el) {
+      el.onclick = function () {
+        var ri = +el.dataset.kori, mi = +el.dataset.komi
+        if (t.knockout && t.knockout[ri] && t.knockout[ri].matches[mi]) {
+          var m = t.knockout[ri].matches[mi]
+          if (m.team1 && m.team2) navigate('/match?id=' + p.id + '&koRi=' + ri + '&koMi=' + mi)
+        }
+      }
+    })
+  }
+
+  /* Group+Knockout: generate knockout */
+  var gko = document.getElementById('btn-gen-ko')
+  if (gko) gko.onclick = function () {
+    t = getTournament(p.id)
+    if (t.format === 'group-knockout') {
+      var gs = {}
+      ;(t.groups || []).forEach(function (g) {
+        var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
+        gs[g.name] = calculateStandings(gm, g.members)
+      })
+      t.knockout = generateKnockoutBracket(gs, t.settings.qualifyCount || 2, t.settings.hasThirdPlace)
+    } else if (t.format === 'single-knockout') {
+      var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
+      var members = t.groups[0] ? t.groups[0].members : []
+      var st = calculateStandings(gm, members)
+      t.knockout = generateSingleKnockoutBracket(st, t.settings.koTeamCount || 4, t.settings.koRule || 'cross', t.settings.hasThirdPlace)
+    }
+    saveTournament(t); showToast('淘汰赛已生成'); _ps.curTab = 'knockout'; render()
+  }
+
+  /* 9-team: generate round of 6 */
+  var gr6 = document.getElementById('btn-gen-r6')
+  if (gr6) gr6.onclick = function () {
+    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    var gs = get9TeamGroupStandings(t)
+    var r6m = generate9TeamRound6Matches(gs)
+    t.matches = (t.matches || []).concat(r6m)
+    nt.stageStatus.group = 'completed'; nt.stageStatus.round6 = 'in_progress'
+    t.nineTeam = nt; saveTournament(t)
+    showToast('6强赛对阵已生成'); _ps.curStage = 'round6'; render()
+  }
+
+  /* 9-team: generate ranking (7-9th) */
+  var grk = document.getElementById('btn-gen-ranking')
+  if (grk) grk.onclick = function () {
+    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    var gs = get9TeamGroupStandings(t)
+    var thirdTeams = []
+    ;(t.groups || []).forEach(function (g) {
+      var gStandings = gs[g.name] || []
+      if (gStandings.length >= 3) thirdTeams.push(gStandings[2])
+    })
+    var rkm = generate9TeamRankingMatches(thirdTeams)
+    t.matches = (t.matches || []).concat(rkm)
+    nt.stageStatus.ranking = 'in_progress'
+    t.nineTeam = nt; saveTournament(t)
+    showToast('排位赛已生成'); _ps.curStage = 'ranking'; render()
+  }
+
+  /* 9-team: generate revival */
+  var grv = document.getElementById('btn-gen-revival')
+  if (grv) grv.onclick = function () {
+    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    var r6m = get9TeamStageMatches(t, 'round6')
+    var losers = [], winners = []
+    r6m.forEach(function (m) {
+      if (m.status === 'finished' && m.winnerId) {
+        var w = m.team1.id === m.winnerId ? m.team1 : m.team2
+        var l = m.team1.id === m.winnerId ? m.team2 : m.team1
+        winners.push(w); losers.push(l)
+      }
+    })
+    nt.round6Winners = winners; nt.round6Losers = losers
+    var rvm = generate9TeamRevivalMatches(losers)
+    t.matches = (t.matches || []).concat(rvm)
+    nt.stageStatus.round6 = 'completed'; nt.stageStatus.revival = 'in_progress'
+    t.nineTeam = nt; saveTournament(t)
+    showToast('复活赛已生成'); _ps.curStage = 'revival'; render()
+  }
+
+  /* 9-team: semi-final draw */
+  var dsf = document.getElementById('btn-draw-semi')
+  if (dsf) dsf.onclick = function () {
+    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    var rvm = get9TeamStageMatches(t, 'revival')
+    var revTeams = []
+    var rIds = new Set()
+    rvm.forEach(function (m) {
+      if (m.team1 && !rIds.has(m.team1.id)) { rIds.add(m.team1.id); revTeams.push(m.team1) }
+      if (m.team2 && !rIds.has(m.team2.id)) { rIds.add(m.team2.id); revTeams.push(m.team2) }
+    })
+    var revStandings = calculateStandings(rvm, revTeams)
+    if (revStandings.length === 0) { showToast('复活赛数据不足'); return }
+    var qualifier = revStandings[0]
+    nt.revivalQualifier = qualifier
+
+    var sfm = generate9TeamSemiFinalDraw(nt.round6Winners || [], qualifier)
+    t.matches = (t.matches || []).concat(sfm)
+    nt.stageStatus.revival = 'completed'; nt.stageStatus.semi = 'in_progress'
+    nt.semiFinalDrawn = true
+    t.nineTeam = nt; saveTournament(t)
+    showToast('半决赛抽签完成'); _ps.curStage = 'semi'; render()
+  }
+
+  /* 9-team: generate finals */
+  var gfn = document.getElementById('btn-gen-finals')
+  if (gfn) gfn.onclick = function () {
+    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    var sm = get9TeamStageMatches(t, 'semi')
+    var sfWinners = [], sfLosers = []
+    sm.forEach(function (m) {
+      if (m.status === 'finished' && m.winnerId) {
+        var w = m.team1.id === m.winnerId ? m.team1 : m.team2
+        var l = m.team1.id === m.winnerId ? m.team2 : m.team1
+        sfWinners.push(w); sfLosers.push(l)
+      }
+    })
+    nt.semiFinalWinners = sfWinners; nt.semiFinalLosers = sfLosers
+    var fm = generate9TeamFinals(sfWinners, sfLosers)
+    t.matches = (t.matches || []).concat(fm)
+    nt.stageStatus.semi = 'completed'; nt.stageStatus.final = 'in_progress'
+    t.nineTeam = nt; saveTournament(t)
+    showToast('决赛已生成'); _ps.curStage = 'final'; render()
+  }
+}
+
+/* ====================================================================
+   PAGE: MATCH (Score Entry)
+   ==================================================================== */
+function renderMatch(p) {
+  var t = _t(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var m = null, isKo = false, koRi = -1, koMi = -1
+  if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
+  else if (p.koRi !== undefined) { koRi = +p.koRi; koMi = +p.koMi; isKo = true; if (t.knockout && t.knockout[koRi]) m = t.knockout[koRi].matches[koMi] }
+  if (!m) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛场次不存在</div></div></div>'
+
+  _ps.score1 = _ps.score1 !== undefined ? _ps.score1 : (m.score1 || '')
+  _ps.score2 = _ps.score2 !== undefined ? _ps.score2 : (m.score2 || '')
+  _ps.winnerId = _ps.winnerId !== undefined ? _ps.winnerId : (m.winnerId || null)
+
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📝 比分录入</div><div style="width:40px"></div></div>'
+
+  var stageLabel = m.matchLabel || m.stage || '比赛'
+  if (m.groupName) stageLabel = m.groupName + '组 第' + m.round + '轮'
+  html += '<div class="card"><div class="match-info"><div class="match-stage">' + esc(stageLabel) + '</div></div>'
+  html += '<div class="teams-display">'
+  html += '<div class="team-side"><div class="team-main-name">' + (m.team1 ? esc(m.team1.name) : 'TBD') + '</div></div>'
+  html += '<div class="vs-text">VS</div>'
+  html += '<div class="team-side"><div class="team-main-name">' + (m.team2 ? esc(m.team2.name) : 'TBD') + '</div></div>'
+  html += '</div></div>'
+
+  html += '<div class="card"><div class="section-title mb-sm">比分</div>'
+  if (m.isRevival) html += '<div class="guide-tip">💡 复活赛采用抢7制，如 7-5、8-6</div>'
+  html += '<div class="score-row"><div class="score-label">' + (m.team1 ? esc(m.team1.name) : '队伍1') + '</div><input class="input-field" id="inp-s1" placeholder="如 6-4,7-5" value="' + esc(_ps.score1) + '"></div>'
+  html += '<div class="score-row"><div class="score-label">' + (m.team2 ? esc(m.team2.name) : '队伍2') + '</div><input class="input-field" id="inp-s2" placeholder="如 4-6,5-7" value="' + esc(_ps.score2) + '"></div>'
+  html += '</div>'
+
+  html += '<div class="card"><div class="section-title mb-sm">胜方</div>'
+  html += '<div class="winner-options">'
+  if (m.team1) {
+    html += '<div class="winner-option' + (_ps.winnerId === m.team1.id ? ' selected' : '') + '" data-wid="' + m.team1.id + '"><div class="winner-name">' + esc(m.team1.name) + '</div>'
+    if (_ps.winnerId === m.team1.id) html += '<div class="winner-check">✓</div>'
+    html += '</div>'
+  }
+  if (m.team2) {
+    html += '<div class="winner-option' + (_ps.winnerId === m.team2.id ? ' selected' : '') + '" data-wid="' + m.team2.id + '"><div class="winner-name">' + esc(m.team2.name) + '</div>'
+    if (_ps.winnerId === m.team2.id) html += '<div class="winner-check">✓</div>'
+    html += '</div>'
+  }
+  html += '</div></div>'
+
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-save">💾 保存比分</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountMatch(p) {
+  var t = _t(p.id); if (!t) return
+  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('inp-s1').oninput = function () { _ps.score1 = this.value }
+  document.getElementById('inp-s2').oninput = function () { _ps.score2 = this.value }
+
+  document.querySelectorAll('[data-wid]').forEach(function (el) {
+    el.onclick = function () { _ps.winnerId = el.dataset.wid; render() }
+  })
+
+  document.getElementById('btn-save').onclick = function () {
+    if (!_ps.winnerId) { showToast('请选择胜方'); return }
+    t = getTournament(p.id)
+    var isKo = p.koRi !== undefined
+    var m = null
+
+    if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
+    else if (isKo) { var ri = +p.koRi, mi = +p.koMi; if (t.knockout && t.knockout[ri]) m = t.knockout[ri].matches[mi] }
+    if (!m) { showToast('比赛未找到'); return }
+
+    m.score1 = _ps.score1; m.score2 = _ps.score2; m.winnerId = _ps.winnerId; m.status = 'finished'
+
+    if (isKo) {
+      var ri = +p.koRi, mi = +p.koMi
+      var winner = m.team1.id === m.winnerId ? m.team1 : m.team2
+      var loser = m.team1.id === m.winnerId ? m.team2 : m.team1
+      t.knockout = advanceKnockoutWinner(t.knockout, ri, mi, winner, loser)
+    }
+
+    if (t.format === 'nine-team') update9TeamProgress(t)
+
+    saveTournament(t); showToast('比分已保存'); goBack()
+  }
+}
+
+function update9TeamProgress(t) {
+  var nt = t.nineTeam || init9TeamData()
+  if (is9TeamStageComplete(t, 'group') && nt.stageStatus.group !== 'completed') nt.stageStatus.group = 'completed'
+  if (is9TeamStageComplete(t, 'round6') && nt.stageStatus.round6 !== 'completed') nt.stageStatus.round6 = 'completed'
+  if (is9TeamStageComplete(t, 'revival') && nt.stageStatus.revival !== 'completed') nt.stageStatus.revival = 'completed'
+  if (is9TeamStageComplete(t, 'semi') && nt.stageStatus.semi !== 'completed') nt.stageStatus.semi = 'completed'
+  var finalM = (t.matches || []).filter(function (m) { return m.stage === 'final' || m.stage === 'third' })
+  if (finalM.length > 0 && finalM.every(function (m) { return m.status === 'finished' })) nt.stageStatus.final = 'completed'
+  if (is9TeamStageComplete(t, 'ranking')) nt.stageStatus.ranking = 'completed'
+  t.nineTeam = nt
+}
+
+/* ====================================================================
+   PAGE: RANKINGS
+   ==================================================================== */
+function renderRankings(p) {
+  var t = _t(p.id)
+  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  var fmt = t.format
+  var html = '<div class="container">'
+  if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
+  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">🏆 排名</div><div style="width:40px"></div></div>'
+
+  if (fmt === 'nine-team') {
+    html += render9TeamRankings(t)
+  } else {
+    html += renderStandardRankings(t)
+  }
+  html += '</div>'
+  return html
+}
+
+function renderStandardRankings(t) {
+  var html = ''
+  ;(t.groups || []).forEach(function (g) {
+    var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
+    var st = calculateStandings(gm, g.members)
+    html += '<div class="round-header">' + esc(g.name) + ' 组排名</div>'
+    html += renderStandingsTable(st, t.format === 'group-knockout' ? (t.settings.qualifyCount || 2) : 0)
+  })
+
+  if (t.knockout && t.knockout.length > 0) {
+    html += '<div class="round-header mt-lg">淘汰赛</div>'
+    html += renderKnockoutBracket(t)
+    var finalRound = t.knockout.find(function (r) { return r.roundName === '决赛' })
+    if (finalRound && finalRound.matches[0] && finalRound.matches[0].winnerId) {
+      var fm = finalRound.matches[0]
+      var champion = fm.team1.id === fm.winnerId ? fm.team1 : fm.team2
+      html += '<div class="champion-card"><div class="champion-title">🏆</div><div class="champion-name">' + esc(champion.name) + '</div><div class="text-sm text-secondary mt-xs">冠军</div></div>'
+    }
+  }
+  return html
+}
+
+function render9TeamRankings(t) {
+  var nt = t.nineTeam || init9TeamData()
+  var tabs = [
+    { key: 'group', label: '小组排名' },
+    { key: 'revival', label: '复活赛排名' },
+    { key: 'ranking', label: '排位赛排名' },
+    { key: 'final', label: '最终排名' }
+  ]
+  var curTab = _ps.rankTab || 'group'
+  var html = '<div class="tab-bar">'
+  tabs.forEach(function (tab) {
+    html += '<div class="tab-item' + (curTab === tab.key ? ' active' : '') + '" data-rtab="' + tab.key + '">' + tab.label + '</div>'
+  })
+  html += '</div>'
+
+  if (curTab === 'group') {
+    var gs = get9TeamGroupStandings(t)
+    ;(t.groups || []).forEach(function (g) {
+      html += '<div class="round-header">' + esc(g.name) + ' 组</div>'
+      var st = gs[g.name] || []
+      html += renderStandingsTable(st, 2)
+    })
+  } else if (curTab === 'revival') {
+    var rvm = get9TeamStageMatches(t, 'revival')
+    if (rvm.length === 0) { html += '<div class="empty-state" style="padding:20px"><div class="empty-text">复活赛尚未开始</div></div>' }
+    else {
+      var rTeams = []; var rIds = new Set()
+      rvm.forEach(function (m) {
+        if (m.team1 && !rIds.has(m.team1.id)) { rIds.add(m.team1.id); rTeams.push(m.team1) }
+        if (m.team2 && !rIds.has(m.team2.id)) { rIds.add(m.team2.id); rTeams.push(m.team2) }
+      })
+      var st = calculateStandings(rvm, rTeams)
+      html += '<div class="round-header">复活赛排名</div>'
+      html += renderStandingsTable(st, 1)
+    }
+  } else if (curTab === 'ranking') {
+    var rkm = get9TeamStageMatches(t, 'ranking')
+    if (rkm.length === 0) { html += '<div class="empty-state" style="padding:20px"><div class="empty-text">排位赛尚未开始</div></div>' }
+    else {
+      var rkTeams = []; var rkIds = new Set()
+      rkm.forEach(function (m) {
+        if (m.team1 && !rkIds.has(m.team1.id)) { rkIds.add(m.team1.id); rkTeams.push(m.team1) }
+        if (m.team2 && !rkIds.has(m.team2.id)) { rkIds.add(m.team2.id); rkTeams.push(m.team2) }
+      })
+      var st = calculateStandings(rkm, rkTeams)
+      html += '<div class="round-header">小组第三排位赛 (第7-9名)</div>'
+      html += renderStandingsTable(st, 0)
+    }
+  } else if (curTab === 'final') {
+    var rk = compute9TeamFinalRankings(t)
+    if (rk.length === 0) { html += '<div class="empty-state" style="padding:20px"><div class="empty-text">比赛尚未全部完成</div></div>' }
+    else {
+      if (rk[0]) html += '<div class="champion-card"><div class="champion-title">🏆</div><div class="champion-name">' + esc(rk[0].team.name) + '</div><div class="text-sm text-secondary mt-xs">冠军</div></div>'
+      html += '<div class="mt-md">'
+      rk.forEach(function (r) {
+        var posIcon = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : '#' + r.rank
+        html += '<div class="final-rank-item"><div class="final-rank-pos">' + posIcon + '</div><div class="final-rank-name">' + esc(r.team.name) + '</div><div class="final-rank-label">' + esc(r.label) + '</div></div>'
+      })
+      html += '</div>'
+    }
+  }
+  return html
+}
+
+function renderStandingsTable(standings, qualifyCount) {
+  if (standings.length === 0) return '<div class="text-center text-hint" style="padding:10px">暂无排名数据</div>'
+  var html = '<div class="standings-table">'
+  html += '<div class="table-header"><div class="col-rank">#</div><div class="col-name">名称</div><div class="col-stat">胜</div><div class="col-stat">负</div><div class="col-points">积分</div></div>'
+  standings.forEach(function (s, i) {
+    html += '<div class="table-row"><div class="col-rank' + (i < 3 ? ' top' : '') + '">'
+    if (i < 3) html += ['🥇', '🥈', '🥉'][i]
+    else html += (i + 1)
+    html += '</div><div class="col-name">' + esc(s.name)
+    if (qualifyCount > 0 && i < qualifyCount) html += ' <span class="qualify-tag">出线</span>'
+    html += '</div><div class="col-stat text-bold">' + s.wins + '</div><div class="col-stat">' + s.losses + '</div><div class="col-points"><span class="score-badge">' + s.points + '</span></div></div>'
+  })
+  html += '</div>'
+  return html
+}
+
+function mountRankings(p) {
+  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.querySelectorAll('[data-rtab]').forEach(function (el) {
+    el.onclick = function () { _ps.rankTab = el.dataset.rtab; render() }
+  })
+}
+
+/* ====================================================================
+   VIEWER MODE INITIALIZATION
+   ==================================================================== */
+function initViewerMode() {
+  var search = location.search
+  if (search.indexOf('share=') >= 0) {
+    var encoded = search.split('share=')[1]
+    if (encoded) {
+      encoded = encoded.split('&')[0]
+      var tourney = loadShareData(encoded)
+      if (tourney) {
+        _viewer = true
+        _viewerTournament = tourney
+        location.hash = '/result?id=' + tourney.id
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/* ====================================================================
+   INIT
+   ==================================================================== */
+window.addEventListener('hashchange', render)
+document.addEventListener('DOMContentLoaded', function () {
+  initViewerMode()
+  render()
+})
