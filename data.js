@@ -23,9 +23,23 @@ function _isFirebaseConfigured() {
 
 function initFirebase() {
   return new Promise(function (resolve) {
+    var _done = false
+    function _finish() { if (!_done) { _done = true; resolve() } }
+    var _timeout = setTimeout(function () {
+      if (_done) return
+      console.warn('[Firebase] Init timeout (12s), trying REST fallback...')
+      _restFallbackSync().then(_finish).catch(_finish)
+    }, 12000)
+
+    function _complete() {
+      clearTimeout(_timeout)
+      _finish()
+    }
+
     if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) {
       console.log('[Firebase] SDK not available, trying REST fallback')
-      _restFallbackSync().then(resolve).catch(function () { resolve() })
+      clearTimeout(_timeout)
+      _restFallbackSync().then(_finish).catch(_finish)
       return
     }
     try {
@@ -41,14 +55,16 @@ function initFirebase() {
         _firebaseReady = true
         _flushSyncQueue()
         console.log('[Firebase] Ready, synced, tournaments:', getTournaments().length)
-        resolve()
+        _complete()
       }).catch(function (e) {
         console.error('[Firebase] SDK init error, trying REST fallback:', e)
-        _restFallbackSync().then(resolve).catch(function () { resolve() })
+        clearTimeout(_timeout)
+        _restFallbackSync().then(_finish).catch(_finish)
       })
     } catch (e) {
       console.error('[Firebase] Setup error, trying REST fallback:', e)
-      _restFallbackSync().then(resolve).catch(function () { resolve() })
+      clearTimeout(_timeout)
+      _restFallbackSync().then(_finish).catch(_finish)
     }
   })
 }
@@ -56,26 +72,33 @@ function initFirebase() {
 function _restFallbackSync() {
   if (!_isFirebaseConfigured()) return Promise.resolve()
   var PROJECT = firebaseConfig.projectId
-  var API_KEY = firebaseConfig.apiKey
   console.log('[REST] Fetching tournaments via REST API...')
-  return fetch('https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents/tournaments?pageSize=100')
-    .then(function (r) { return r.json() })
-    .then(function (data) {
-      var docs = data.documents || []
-      if (docs.length === 0) { console.log('[REST] No documents found'); return }
-      var cloudList = docs.map(function (doc) { return _firestoreDocToObj(doc.fields || {}) })
-      var localList = getTournaments()
-      var localIds = {}; localList.forEach(function (t) { localIds[t.id] = true })
-      cloudList.forEach(function (ct) {
-        if (ct.id && !localIds[ct.id]) localList.push(ct)
-      })
-      localList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(localList))
-      _firebaseReady = true
-      console.log('[REST] Synced', docs.length, 'tournaments from cloud')
-    }).catch(function (e) {
-      console.error('[REST] Fallback failed:', e)
+  var url = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents/tournaments?pageSize=200'
+  var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+  var timer = ctrl ? setTimeout(function () { ctrl.abort() }, 10000) : null
+  var opts = ctrl ? { signal: ctrl.signal } : {}
+  return fetch(url, opts).then(function (r) {
+    if (timer) clearTimeout(timer)
+    return r.json()
+  }).then(function (data) {
+    var docs = data.documents || []
+    console.log('[REST] Got', docs.length, 'documents')
+    if (docs.length === 0) return
+    var cloudList = docs.map(function (doc) { return _firestoreDocToObj(doc.fields || {}) })
+    var localList = getTournaments()
+    var localIds = {}; localList.forEach(function (t) { localIds[t.id] = true })
+    var added = 0
+    cloudList.forEach(function (ct) {
+      if (ct.id && !localIds[ct.id]) { localList.push(ct); added++ }
     })
+    localList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localList))
+    _firebaseReady = true
+    console.log('[REST] Synced, added', added, 'new tournaments, total:', localList.length)
+  }).catch(function (e) {
+    if (timer) clearTimeout(timer)
+    console.error('[REST] Fallback failed:', e.message || e)
+  })
 }
 
 function _firestoreDocToObj(fields) {

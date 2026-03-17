@@ -131,8 +131,6 @@ var TYPE = { singles: '单打', doubles: '双打' }
    ==================================================================== */
 function renderHome() {
   var ts = _viewer ? [] : getTournaments()
-  var q = (_ps.q || '').trim().toLowerCase()
-  if (q) ts = ts.filter(function (t) { return t.name.toLowerCase().includes(q) })
   var html = '<div class="container">'
   html += '<div class="home-header"><div class="home-title">🎾 TENNIS GO!</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
   if (!_viewer) {
@@ -140,57 +138,72 @@ function renderHome() {
     if (_firebaseReady) html += '<button class="btn-icon" id="btn-refresh" title="刷新" style="font-size:18px;opacity:.5;flex-shrink:0">🔄</button>'
     html += '</div>'
     if (_isFirebaseConfigured() && !_firebaseReady) {
-      html += '<div class="text-center text-hint" style="padding:8px;font-size:12px;opacity:.5">☁️ 云端同步中...</div>'
+      html += '<div id="cloud-status" class="text-center text-hint" style="padding:8px;font-size:12px;opacity:.5">☁️ 云端同步中...</div>'
     }
-    if (ts.length === 0 && !q) {
-      html += '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-text">还没有比赛记录</div><div class="empty-hint">点击下方按钮创建第一场比赛</div></div>'
-    } else if (ts.length === 0 && q) {
-      html += '<div class="empty-state" style="padding:30px"><div class="empty-icon">🔍</div><div class="empty-text">未找到 "' + esc(q) + '" 相关比赛</div><div class="empty-hint">试试其他关键词，或清空搜索</div></div>'
-    } else {
-      ts.forEach(function (t) {
-        html += '<div class="card tournament-card" data-id="' + t.id + '">'
-        html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(TYPE[t.type] || '') + '</div></div>'
-        html += '<div class="tournament-meta">'
-        html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
-        if (_firebaseReady && !isCreator(t)) html += '<span class="tag" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);font-size:10px">他人创建</span>'
-        if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
-        if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
-        var _mc = (t.matches || []).length, _fc = (t.matches || []).filter(function (m) { return m.status === 'finished' }).length
-        if (_mc > 0) html += '<span class="tag tag-purple">' + _fc + '/' + _mc + '场</span>'
-        html += '</div>'
-        html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
-        html += '<div class="share-icon" data-share="' + t.id + '" title="分享">📤</div>'
-        html += '</div>'
-      })
-    }
+    html += '<div id="empty-init" class="empty-state"' + (ts.length > 0 ? ' style="display:none"' : '') + '><div class="empty-icon">🏆</div><div class="empty-text">还没有比赛记录</div><div class="empty-hint">点击下方按钮创建第一场比赛</div></div>'
+    html += '<div id="search-empty" class="empty-state" style="display:none;padding:30px"><div class="empty-icon">🔍</div><div class="empty-text">未找到相关比赛</div><div class="empty-hint">试试其他关键词，或清空搜索</div></div>'
+    ts.forEach(function (t) {
+      html += '<div class="card tournament-card" data-id="' + t.id + '">'
+      html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(TYPE[t.type] || '') + '</div></div>'
+      html += '<div class="tournament-meta">'
+      html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
+      if (_firebaseReady && !isCreator(t)) html += '<span class="tag" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);font-size:10px">他人创建</span>'
+      if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
+      if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
+      var _mc = (t.matches || []).length, _fc = (t.matches || []).filter(function (m) { return m.status === 'finished' }).length
+      if (_mc > 0) html += '<span class="tag tag-purple">' + _fc + '/' + _mc + '场</span>'
+      html += '</div>'
+      html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
+      html += '<div class="share-icon" data-share="' + t.id + '" title="分享">📤</div>'
+      html += '</div>'
+    })
     html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-new">➕ 新建比赛</button></div>'
   }
   html += '</div>'
   return html
 }
 
+function _filterCards(q) {
+  _ps.q = q
+  var kw = (q || '').trim().toLowerCase()
+  var cards = document.querySelectorAll('.tournament-card')
+  var visible = 0
+  cards.forEach(function (c) {
+    var n = c.querySelector('.tournament-name')
+    var show = !kw || (n && n.textContent.toLowerCase().indexOf(kw) >= 0)
+    c.style.display = show ? '' : 'none'
+    if (show) visible++
+  })
+  var emI = document.getElementById('empty-init')
+  var emS = document.getElementById('search-empty')
+  if (emI) emI.style.display = (!kw && cards.length === 0) ? '' : 'none'
+  if (emS) emS.style.display = (kw && visible === 0) ? '' : 'none'
+}
+
 function mountHome() {
   var s = document.getElementById('home-search')
   if (s) {
-    function _doSearch() {
-      _ps.q = s.value
-      render()
-      var s2 = document.getElementById('home-search')
-      if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length) }
-    }
+    var _composing = false
+    s.addEventListener('compositionstart', function () { _composing = true })
+    s.addEventListener('compositionend', function () {
+      _composing = false
+      _filterCards(s.value)
+    })
     var _debounce = null
     s.oninput = function () {
+      if (_composing) return
       clearTimeout(_debounce)
-      _debounce = setTimeout(_doSearch, 300)
+      _debounce = setTimeout(function () { _filterCards(s.value) }, 150)
     }
     s.onkeydown = function (e) {
-      if (e.key === 'Enter') { clearTimeout(_debounce); _doSearch() }
+      if (e.key === 'Enter') { clearTimeout(_debounce); _filterCards(s.value) }
     }
+    if (_ps.q) _filterCards(_ps.q)
   }
   var sb = document.getElementById('btn-search')
   if (sb) sb.onclick = function () {
     var s = document.getElementById('home-search')
-    if (s) { _ps.q = s.value; render() }
+    if (s) _filterCards(s.value)
   }
   var rb = document.getElementById('btn-refresh')
   if (rb) rb.onclick = function () {
@@ -1679,9 +1692,20 @@ document.addEventListener('DOMContentLoaded', function () {
   initViewerMode()
   render()
   if (typeof initFirebase === 'function' && !_viewer) {
+    console.log('[App] Starting Firebase init...')
     initFirebase().then(function () {
+      console.log('[App] Firebase done, firebaseReady=' + _firebaseReady + ', tournaments=' + getTournaments().length)
+      var cs = document.getElementById('cloud-status')
+      if (cs) {
+        if (_firebaseReady) {
+          cs.textContent = '✅ 云端已连接'
+          setTimeout(function () { cs.style.display = 'none' }, 2000)
+        } else {
+          cs.textContent = '⚠️ 云端连接失败，仅显示本地数据'
+          cs.style.color = 'rgba(255,160,80,.7)'
+        }
+      }
       render()
-      console.log('[App] Rendered with cloud data')
     })
   }
 })
