@@ -31,6 +31,21 @@ function showModal(opts) {
   document.getElementById('modal-mask').onclick = function (e) { if (e.target.id === 'modal-mask') { root.innerHTML = ''; if (opts.onCancel) opts.onCancel() } }
 }
 
+function showPrompt(opts) {
+  var root = document.getElementById('modal-root')
+  var html = '<div class="modal-mask" id="modal-mask"><div class="modal-content">'
+  html += '<div class="modal-title">' + esc(opts.title || '输入') + '</div>'
+  html += '<div style="padding:0 4px 16px"><input class="input-field" id="prompt-input" value="' + esc(opts.value || '') + '" placeholder="' + esc(opts.placeholder || '') + '" maxlength="' + (opts.maxlength || 30) + '"></div>'
+  html += '<div class="modal-actions"><button class="btn-secondary" id="modal-cancel">取消</button><button class="btn-primary" id="modal-confirm">' + esc(opts.confirmText || '确定') + '</button></div>'
+  html += '</div></div>'
+  root.innerHTML = html
+  var inp = document.getElementById('prompt-input')
+  setTimeout(function () { inp.focus(); inp.select() }, 50)
+  document.getElementById('modal-confirm').onclick = function () { var v = inp.value.trim(); root.innerHTML = ''; if (opts.onConfirm) opts.onConfirm(v) }
+  document.getElementById('modal-cancel').onclick = function () { root.innerHTML = '' }
+  document.getElementById('modal-mask').onclick = function (e) { if (e.target.id === 'modal-mask') root.innerHTML = '' }
+}
+
 function showActionSheet(items, onCancel) {
   var root = document.getElementById('modal-root')
   var html = '<div class="action-sheet-mask" id="as-mask"><div class="action-sheet">'
@@ -100,7 +115,7 @@ function renderHome() {
   var q = (_ps.q || '').trim().toLowerCase()
   if (q) ts = ts.filter(function (t) { return t.name.toLowerCase().includes(q) })
   var html = '<div class="container">'
-  html += '<div class="home-header"><div class="home-title">🎾 网球赛事管理</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
+  html += '<div class="home-header"><div class="home-title">🎾 TENNIS GO!</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
   if (!_viewer) {
     html += '<div class="search-box"><input class="input-field" id="home-search" placeholder="搜索比赛名称..." value="' + esc(_ps.q || '') + '"></div>'
     if (ts.length === 0 && !q) {
@@ -113,6 +128,8 @@ function renderHome() {
         html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
         if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
         if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
+        var _mc = (t.matches || []).length, _fc = (t.matches || []).filter(function (m) { return m.status === 'finished' }).length
+        if (_mc > 0) html += '<span class="tag tag-purple">' + _fc + '/' + _mc + '场</span>'
         html += '</div>'
         html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
         html += '<div class="share-icon" data-share="' + t.id + '" title="分享">📤</div>'
@@ -505,7 +522,7 @@ function renderSettings(p) {
   html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + itemCount + (isD ? ' 队' : ' 人') + ' · ' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div></div>'
 
   if (fmt === 'round-robin') {
-    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">单循环赛无需分组，所有' + (isD ? '队伍' : '选手') + '进行循环赛。</div></div>'
+    html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">所有' + (isD ? '队伍' : '选手') + '进行循环赛，每两者之间都有一场比赛。</div></div>'
   } else if (fmt === 'nine-team') {
     if (!s.round6Rule) s.round6Rule = 'ranked'
     html += '<div class="card"><div class="section-title mb-sm">📋 赛制说明</div><div class="text-sm text-secondary">分为3组（A/B/C），每组' + Math.ceil(itemCount / 3) + (isD ? '队' : '人') + '。经过小组赛→6强赛→复活赛→4强赛→决赛决出排名。</div></div>'
@@ -535,26 +552,30 @@ function renderSettings(p) {
     html += '</div>'
   }
 
-  if (fmt !== 'round-robin') {
-    html += '<div class="card"><div class="section-title mb-sm">🎯 分组方式</div>'
-    html += '<div class="draw-options" style="flex-wrap:wrap">'
-    html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">🐍 蛇形分组</div><div class="draw-option-desc">按积分排序蛇形分配</div></div>'
-    html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机抽签</div><div class="draw-option-desc">种子固定后随机分配</div></div>'
-    if (fmt === 'nine-team') {
-      html += '<div class="draw-option' + (s.drawMethod === 'custom' ? ' active' : '') + '" data-dm="custom"><div class="draw-option-title">✏️ 自定义分组</div><div class="draw-option-desc">手动将' + (isD ? '队伍' : '选手') + '分配到A/B/C组</div></div>'
-    }
-    html += '</div></div>'
+  var _isMultiGroup = (fmt === 'group-knockout' || fmt === 'nine-team')
+  var _drawTitle = _isMultiGroup ? '🎯 分组方式' : '🎯 排序方式'
+  html += '<div class="card"><div class="section-title mb-sm">' + _drawTitle + '</div>'
+  html += '<div class="draw-options" style="flex-wrap:wrap">'
+  if (_isMultiGroup) {
+    html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">🐍 蛇形分组</div><div class="draw-option-desc">按积分蛇形分配</div></div>'
+    html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机分组</div><div class="draw-option-desc">种子固定后随机</div></div>'
+  } else {
+    html += '<div class="draw-option' + (s.drawMethod === 'snake' ? ' active' : '') + '" data-dm="snake"><div class="draw-option-title">📊 按积分排序</div><div class="draw-option-desc">按积分从高到低</div></div>'
+    html += '<div class="draw-option' + (s.drawMethod === 'random' ? ' active' : '') + '" data-dm="random"><div class="draw-option-title">🎲 随机排序</div><div class="draw-option-desc">随机打乱顺序</div></div>'
+  }
+  html += '<div class="draw-option' + (s.drawMethod === 'custom' ? ' active' : '') + '" data-dm="custom"><div class="draw-option-title">✏️ 自定义</div><div class="draw-option-desc">手动' + (_isMultiGroup ? '分配到各组' : '设定顺序') + '</div></div>'
+  html += '</div></div>'
 
-    if (s.drawMethod === 'custom' && fmt === 'nine-team') {
-      var existingIds = {}; items.forEach(function(it) { existingIds[it.id] = true })
+  if (s.drawMethod === 'custom') {
+    if (fmt === 'nine-team') {
       if (!s.customGroups) s.customGroups = {}
-      var hasAll = items.every(function(it) { return s.customGroups[it.id] })
-      if (!hasAll) { s.customGroups = {}; items.forEach(function(it, idx) { s.customGroups[it.id] = String.fromCharCode(65 + (idx % 3)) }) }
-      var gcA = 0, gcB = 0, gcC = 0
-      items.forEach(function(it) { var g = s.customGroups[it.id]; if (g === 'A') gcA++; else if (g === 'B') gcB++; else if (g === 'C') gcC++ })
+      var _hasAllNt = items.every(function(it) { return s.customGroups[it.id] })
+      if (!_hasAllNt) { s.customGroups = {}; items.forEach(function(it, idx) { s.customGroups[it.id] = String.fromCharCode(65 + (idx % 3)) }) }
+      var _gcA = 0, _gcB = 0, _gcC = 0
+      items.forEach(function(it) { var g = s.customGroups[it.id]; if (g === 'A') _gcA++; else if (g === 'B') _gcB++; else if (g === 'C') _gcC++ })
       html += '<div class="card"><div class="section-title mb-sm">📝 自定义分组</div>'
-      html += '<div class="flex-between mb-sm"><div class="text-sm text-secondary">点击 A/B/C 按钮分配各' + (isD ? '队伍' : '选手') + '所在组</div></div>'
-      html += '<div class="flex-row gap-md mb-sm" style="justify-content:center"><span class="tag tag-blue">A组: ' + gcA + '</span><span class="tag tag-green">B组: ' + gcB + '</span><span class="tag tag-orange">C组: ' + gcC + '</span></div>'
+      html += '<div class="text-sm text-secondary mb-sm">点击 A/B/C 按钮分配各' + (isD ? '队伍' : '选手') + '所在组</div>'
+      html += '<div class="flex-row gap-md mb-sm" style="justify-content:center"><span class="tag tag-blue">A组: ' + _gcA + '</span><span class="tag tag-green">B组: ' + _gcB + '</span><span class="tag tag-orange">C组: ' + _gcC + '</span></div>'
       items.forEach(function(it) {
         var assigned = s.customGroups[it.id] || 'A'
         html += '<div class="custom-group-row"><div class="custom-group-name">' + esc(it.name) + '</div><div class="custom-group-name-score">' + it.score + '</div><div class="custom-group-btns">'
@@ -564,12 +585,50 @@ function renderSettings(p) {
         html += '</div></div>'
       })
       html += '</div>'
+    } else if (fmt === 'group-knockout') {
+      var _gkCount = s.groupCount || 2
+      var _gkNames = []; for (var _gi = 0; _gi < _gkCount; _gi++) _gkNames.push(String.fromCharCode(65 + _gi))
+      if (!s.customGroups) s.customGroups = {}
+      var _hasAllGk = items.every(function(it) { return s.customGroups[it.id] && _gkNames.indexOf(s.customGroups[it.id]) >= 0 })
+      if (!_hasAllGk) { s.customGroups = {}; items.forEach(function(it, idx) { s.customGroups[it.id] = _gkNames[idx % _gkCount] }) }
+      var _gkCounts = {}; _gkNames.forEach(function(gn) { _gkCounts[gn] = 0 })
+      items.forEach(function(it) { var g = s.customGroups[it.id]; if (_gkCounts[g] !== undefined) _gkCounts[g]++ })
+      html += '<div class="card"><div class="section-title mb-sm">📝 自定义分组</div>'
+      html += '<div class="text-sm text-secondary mb-sm">点击按钮分配各' + (isD ? '队伍' : '选手') + '所在组</div>'
+      html += '<div class="flex-row gap-sm mb-sm" style="justify-content:center;flex-wrap:wrap">'
+      var _tagCls = ['tag-blue', 'tag-green', 'tag-orange', 'tag-purple', 'tag-red']
+      _gkNames.forEach(function(gn, gi) { html += '<span class="tag ' + _tagCls[gi % _tagCls.length] + '">' + gn + '组: ' + _gkCounts[gn] + '</span>' })
+      html += '</div>'
+      items.forEach(function(it) {
+        var assigned = s.customGroups[it.id] || _gkNames[0]
+        html += '<div class="custom-group-row"><div class="custom-group-name">' + esc(it.name) + '</div><div class="custom-group-name-score">' + it.score + '</div><div class="custom-group-btns">'
+        _gkNames.forEach(function(gn) {
+          html += '<div class="group-btn' + (assigned === gn ? ' active' : '') + '" data-cg-id="' + it.id + '" data-cg-group="' + gn + '" style="padding:5px 14px;font-size:12px">' + gn + '</div>'
+        })
+        html += '</div></div>'
+      })
+      html += '</div>'
+    } else {
+      if (!s.customOrder || s.customOrder.length !== items.length) {
+        s.customOrder = items.slice().sort(function(a, b) { return b.score - a.score }).map(function(it) { return it.id })
+      }
+      var _coMap = {}; items.forEach(function(it) { _coMap[it.id] = it })
+      html += '<div class="card"><div class="section-title mb-sm">📝 自定义排序</div>'
+      html += '<div class="text-sm text-secondary mb-sm">使用箭头调整' + (isD ? '队伍' : '选手') + '顺序</div>'
+      s.customOrder.forEach(function(id, idx) {
+        var it = _coMap[id]; if (!it) return
+        html += '<div class="custom-group-row"><div style="min-width:26px;text-align:center;font-weight:700;color:var(--text3)">' + (idx + 1) + '</div><div class="custom-group-name">' + esc(it.name) + '</div><div class="custom-group-name-score">' + it.score + '</div><div class="custom-group-btns">'
+        html += '<div class="group-btn" data-co-id="' + id + '" data-co-dir="up" style="padding:4px 10px;font-size:11px;opacity:' + (idx === 0 ? '.25' : '1') + '">▲</div>'
+        html += '<div class="group-btn" data-co-id="' + id + '" data-co-dir="down" style="padding:4px 10px;font-size:11px;opacity:' + (idx === s.customOrder.length - 1 ? '.25' : '1') + '">▼</div>'
+        html += '</div></div>'
+      })
+      html += '</div>'
     }
+  }
 
-    if (s.drawMethod !== 'custom') {
-      html += '<div class="card"><div class="section-title mb-sm">⭐ 种子设置</div>'
-      html += '<div class="seed-row"><span class="seed-label">种子数量</span><input class="input-field seed-input" id="inp-seed" type="number" min="0" max="' + itemCount + '" value="' + (s.seedCount || 0) + '"><span class="text-sm text-hint ml-sm">前N名为种子</span></div></div>'
-    }
+  if (s.drawMethod !== 'custom' && _isMultiGroup) {
+    html += '<div class="card"><div class="section-title mb-sm">⭐ 种子设置</div>'
+    html += '<div class="seed-row"><span class="seed-label">种子数量</span><input class="input-field seed-input" id="inp-seed" type="number" min="0" max="' + itemCount + '" value="' + (s.seedCount || 0) + '"><span class="text-sm text-hint ml-sm">前N名为种子</span></div></div>'
   }
 
   html += '<div class="bottom-bar"><button class="btn-accent btn-block" id="btn-draw">🎾 开始抽签</button></div>'
@@ -607,6 +666,18 @@ function mountSettings(p) {
       t.settings = s; saveTournament(t); render()
     }
   })
+  document.querySelectorAll('[data-co-id]').forEach(function (el) {
+    el.onclick = function () {
+      if (!s.customOrder) return
+      var id = el.dataset.coId, dir = el.dataset.coDir
+      var idx = s.customOrder.indexOf(id)
+      if (idx < 0) return
+      if (dir === 'up' && idx > 0) { var tmp = s.customOrder[idx - 1]; s.customOrder[idx - 1] = id; s.customOrder[idx] = tmp }
+      else if (dir === 'down' && idx < s.customOrder.length - 1) { var tmp = s.customOrder[idx + 1]; s.customOrder[idx + 1] = id; s.customOrder[idx] = tmp }
+      else return
+      t.settings = s; saveTournament(t); render()
+    }
+  })
   var sd = document.getElementById('inp-seed')
   if (sd) sd.oninput = function () { s.seedCount = Math.max(0, parseInt(sd.value) || 0); t.settings = s; saveTournament(t) }
 
@@ -618,26 +689,44 @@ function mountSettings(p) {
     var fmt = t.format
     t.settings = s; t.matches = []; t.knockout = null
     if (fmt === 'nine-team') t.nineTeam = init9TeamData()
+    function _buildCustomOrder(order, its) {
+      var m = {}; its.forEach(function(x) { m[x.id] = x })
+      return (order || []).map(function(id) { return m[id] ? Object.assign({}, m[id]) : null }).filter(Boolean)
+    }
+    function _buildCustomGroups(cg, its, names) {
+      var gm = {}; names.forEach(function(n) { gm[n] = [] })
+      its.forEach(function(it) { var g = cg[it.id] || names[0]; if (gm[g]) gm[g].push(Object.assign({}, it)); else gm[names[0]].push(Object.assign({}, it)) })
+      return names.map(function(n) { return {name: n, members: gm[n]} })
+    }
     if (fmt === 'round-robin') {
-      t.groups = [{ name: 'A', members: shuffleArray(items.map(function (x) { return Object.assign({}, x) })) }]
+      if (s.drawMethod === 'custom' && s.customOrder) {
+        t.groups = [{ name: 'A', members: _buildCustomOrder(s.customOrder, items) }]
+      } else if (s.drawMethod === 'random') {
+        t.groups = [{ name: 'A', members: shuffleArray(items.map(function (x) { return Object.assign({}, x) })) }]
+      } else {
+        t.groups = [{ name: 'A', members: items.slice().sort(function (a, b) { return b.score - a.score }).map(function (x) { return Object.assign({}, x) }) }]
+      }
     } else if (fmt === 'nine-team') {
       if (s.drawMethod === 'custom' && s.customGroups) {
-        var gMap = {A:[],B:[],C:[]}
-        items.forEach(function(it) {
-          var g = s.customGroups[it.id] || 'A'
-          if (gMap[g]) gMap[g].push(Object.assign({}, it))
-          else gMap['A'].push(Object.assign({}, it))
-        })
-        t.groups = [{name:'A',members:gMap.A},{name:'B',members:gMap.B},{name:'C',members:gMap.C}]
+        t.groups = _buildCustomGroups(s.customGroups, items, ['A', 'B', 'C'])
       } else {
         var gc = 3, sc = Math.min(s.seedCount || 0, items.length)
         t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
       }
     } else if (fmt === 'group-knockout') {
-      var gc = s.groupCount || 2, sc = Math.min(s.seedCount || 0, items.length)
-      t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+      if (s.drawMethod === 'custom' && s.customGroups) {
+        var _gkN = []; for (var _gi = 0; _gi < (s.groupCount || 2); _gi++) _gkN.push(String.fromCharCode(65 + _gi))
+        t.groups = _buildCustomGroups(s.customGroups, items, _gkN)
+      } else {
+        var gc = s.groupCount || 2, sc = Math.min(s.seedCount || 0, items.length)
+        t.groups = s.drawMethod === 'random' ? randomGroup(items, gc, sc) : snakeGroup(items, gc, sc)
+      }
     } else if (fmt === 'single-knockout') {
-      t.groups = [{ name: 'A', members: (s.drawMethod === 'random' ? shuffleArray(items) : items.slice().sort(function (a, b) { return b.score - a.score })).map(function (x) { return Object.assign({}, x) }) }]
+      if (s.drawMethod === 'custom' && s.customOrder) {
+        t.groups = [{ name: 'A', members: _buildCustomOrder(s.customOrder, items) }]
+      } else {
+        t.groups = [{ name: 'A', members: (s.drawMethod === 'random' ? shuffleArray(items) : items.slice().sort(function (a, b) { return b.score - a.score })).map(function (x) { return Object.assign({}, x) }) }]
+      }
     }
     saveTournament(t)
     showToast('抽签完成！')
@@ -657,7 +746,9 @@ function renderResult(p) {
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
   html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📋 分组结果</div><div style="width:40px"></div></div>'
-  html += '<div class="card header-card"><div class="header-name">' + esc(t.name) + '</div>'
+  html += '<div class="card header-card"><div class="flex-between"><div class="header-name">' + esc(t.name) + '</div>'
+  if (!_viewer) html += '<button class="btn-icon" id="btn-edit-name" title="修改名称" style="font-size:16px;opacity:.6">✏️</button>'
+  html += '</div>'
   html += '<div class="header-summary">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt])
   var totalMembers = 0; t.groups.forEach(function (g) { totalMembers += g.members.length })
   html += ' · ' + t.groups.length + '组 · ' + totalMembers + (isD ? '队' : '人') + '</div></div>'
@@ -705,6 +796,18 @@ function mountResult(p) {
   })
 
   if (_viewer) return
+
+  var en = document.getElementById('btn-edit-name')
+  if (en) en.onclick = function () {
+    showPrompt({
+      title: '修改比赛名称', value: t.name, placeholder: '输入新名称',
+      onConfirm: function (val) {
+        if (!val) { showToast('名称不能为空'); return }
+        t = getTournament(p.id); t.name = val; saveTournament(t)
+        showToast('名称已修改'); render()
+      }
+    })
+  }
 
   var gs = document.getElementById('btn-gen-schedule')
   if (gs) gs.onclick = function () {
@@ -881,6 +984,9 @@ function renderSchedule(p) {
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
   html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📅 赛程</div><button class="btn-icon" id="btn-rankings">🏆</button></div>'
+  html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div>'
+  if (!_viewer) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">✏️</button>'
+  html += '</div></div>'
 
   if (fmt === 'nine-team') {
     html += render9TeamSchedule(t)
@@ -1083,6 +1189,17 @@ function mountSchedule(p) {
   var t = _t(p.id); if (!t) return
   document.getElementById('btn-back').onclick = function () { goBack() }
   document.getElementById('btn-rankings').onclick = function () { navigate('/rankings?id=' + p.id) }
+  var _enSch = document.getElementById('btn-edit-name-sch')
+  if (_enSch) _enSch.onclick = function () {
+    showPrompt({
+      title: '修改比赛名称', value: t.name, placeholder: '输入新名称',
+      onConfirm: function (val) {
+        if (!val) { showToast('名称不能为空'); return }
+        var _t2 = getTournament(p.id); _t2.name = val; saveTournament(_t2)
+        showToast('名称已修改'); render()
+      }
+    })
+  }
 
   document.querySelectorAll('[data-tab]').forEach(function (el) {
     el.onclick = function () { _ps.curTab = el.dataset.tab; render() }

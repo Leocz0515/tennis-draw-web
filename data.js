@@ -485,12 +485,12 @@ function renderExportImage(title, bodyHtml, theme) {
   var headerHtml = '<div style="background:'+th.headerBg+';padding:28px 32px 24px;position:relative;overflow:hidden">'
   headerHtml += '<div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.1)"></div>'
   headerHtml += '<div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.06)"></div>'
-  headerHtml += '<div style="font-size:32px;margin-bottom:6px;position:relative">🎾</div>'
+  headerHtml += '<div style="font-size:28px;margin-bottom:4px;position:relative;font-weight:900;color:'+th.headerText+'">🎾 TENNIS GO!</div>'
   headerHtml += '<div style="font-size:20px;font-weight:800;color:'+th.headerText+';position:relative;line-height:1.3">'+esc(title)+'</div>'
   headerHtml += '<div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:8px;position:relative">'+formatTime(Date.now())+'</div>'
   headerHtml += '</div>'
   var bodyWrap = '<div style="background:'+th.bg+';padding:24px 28px 20px">'+bodyHtml+'</div>'
-  var footer = '<div style="background:'+th.bg+';padding:12px 28px 18px;text-align:center;border-top:1px solid '+th.border+'"><div style="font-size:11px;color:'+th.sub+'">网球赛事管理系统 · Tennis Draw</div></div>'
+  var footer = '<div style="background:'+th.bg+';padding:12px 28px 18px;text-align:center;border-top:1px solid '+th.border+'"><div style="font-size:11px;color:'+th.sub+'">TENNIS GO!</div></div>'
   container.innerHTML = headerHtml + bodyWrap + footer
   document.body.appendChild(container)
   return { el: container, theme: th }
