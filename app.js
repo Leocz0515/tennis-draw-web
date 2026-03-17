@@ -117,9 +117,11 @@ function renderHome() {
   var html = '<div class="container">'
   html += '<div class="home-header"><div class="home-title">🎾 TENNIS GO!</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
   if (!_viewer) {
-    html += '<div class="search-box"><input class="input-field" id="home-search" placeholder="搜索比赛名称..." value="' + esc(_ps.q || '') + '"></div>'
+    html += '<div class="search-box"><input class="input-field" id="home-search" placeholder="搜索比赛名称..." value="' + esc(_ps.q || '') + '"><button class="btn-primary" id="btn-search" style="padding:0 18px;flex-shrink:0;border-radius:var(--pill);font-size:16px">🔍</button></div>'
     if (ts.length === 0 && !q) {
       html += '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-text">还没有比赛记录</div><div class="empty-hint">点击下方按钮创建第一场比赛</div></div>'
+    } else if (ts.length === 0 && q) {
+      html += '<div class="empty-state" style="padding:30px"><div class="empty-icon">🔍</div><div class="empty-text">未找到 "' + esc(q) + '" 相关比赛</div><div class="empty-hint">试试其他关键词，或清空搜索</div></div>'
     } else {
       ts.forEach(function (t) {
         html += '<div class="card tournament-card" data-id="' + t.id + '">'
@@ -145,13 +147,25 @@ function renderHome() {
 function mountHome() {
   var s = document.getElementById('home-search')
   if (s) {
-    s.oninput = function () {
+    function _doSearch() {
       _ps.q = s.value
-      var cursorPos = s.selectionStart
       render()
       var s2 = document.getElementById('home-search')
-      if (s2) { s2.focus(); s2.setSelectionRange(cursorPos, cursorPos) }
+      if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length) }
     }
+    var _debounce = null
+    s.oninput = function () {
+      clearTimeout(_debounce)
+      _debounce = setTimeout(_doSearch, 300)
+    }
+    s.onkeydown = function (e) {
+      if (e.key === 'Enter') { clearTimeout(_debounce); _doSearch() }
+    }
+  }
+  var sb = document.getElementById('btn-search')
+  if (sb) sb.onclick = function () {
+    var s = document.getElementById('home-search')
+    if (s) { _ps.q = s.value; render() }
   }
   var btn = document.getElementById('btn-new')
   if (btn) btn.onclick = function () { navigate('/create') }
