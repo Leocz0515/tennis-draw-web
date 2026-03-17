@@ -114,6 +114,10 @@ function _syncFromCloud() {
         cloudMap[lt.id] = lt
         _pushToCloud(lt)
         pushCount++
+      } else if ((lt.updateTime || 0) > (cloudMap[lt.id].updateTime || 0)) {
+        cloudMap[lt.id] = lt
+        _pushToCloud(lt)
+        pushCount++
       }
     })
     var merged = Object.keys(cloudMap).map(function (k) { return cloudMap[k] })

@@ -1229,7 +1229,7 @@ function renderMatchList(matches, t) {
     else if (m.round) html += '<div class="match-round">第 ' + m.round + ' 轮' + (m.groupName ? ' · ' + m.groupName + '组' : '') + '</div>'
     html += '<div class="match-teams">'
     html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team1 ? m.team1.id : '') ? ' winner' : '') + (m.team1 ? '' : ' tbd') + '">' + (m.team1 ? esc(m.team1.name) : 'TBD') + '</div></div>'
-    html += '<div class="match-vs' + (m.status === 'finished' ? ' has-score' : '') + '">' + (m.status === 'finished' ? (m.score1 || '0') + ' : ' + (m.score2 || '0') : 'VS') + '</div>'
+    html += '<div class="match-vs' + (m.status === 'finished' ? ' has-score' : '') + '">' + (m.status === 'finished' ? esc(m.score1 || '-') + ' : ' + esc(m.score2 || '-') : 'VS') + '</div>'
     html += '<div class="match-team"><div class="match-team-name' + (m.winnerId && m.winnerId === (m.team2 ? m.team2.id : '') ? ' winner' : '') + (m.team2 ? '' : ' tbd') + '">' + (m.team2 ? esc(m.team2.name) : 'TBD') + '</div></div>'
     html += '</div>'
     if (m.status === 'finished') html += '<div class="match-status"><span class="tag tag-green">已完成</span></div>'
@@ -1248,7 +1248,7 @@ function renderKnockoutBracket(t) {
       html += '<div class="ko-match-card" data-kori="' + ri + '" data-komi="' + mi + '">'
       html += '<div class="ko-teams">'
       html += '<div class="ko-team' + (m.winnerId && m.team1 && m.winnerId === m.team1.id ? ' winner' : '') + (m.team1 ? '' : ' tbd') + '">' + (m.team1 ? esc(m.team1.name) : '待定') + '</div>'
-      html += '<div class="ko-vs">' + (m.status === 'finished' ? (m.score1 || '0') + ':' + (m.score2 || '0') : 'VS') + '</div>'
+      html += '<div class="ko-vs">' + (m.status === 'finished' ? esc(m.score1 || '-') + ':' + esc(m.score2 || '-') : 'VS') + '</div>'
       html += '<div class="ko-team' + (m.winnerId && m.team2 && m.winnerId === m.team2.id ? ' winner' : '') + (m.team2 ? '' : ' tbd') + '">' + (m.team2 ? esc(m.team2.name) : '待定') + '</div>'
       html += '</div></div>'
     })
