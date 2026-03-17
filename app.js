@@ -14,6 +14,11 @@ function _canEdit(t) {
   return true
 }
 
+function _canScore(t) {
+  if (_viewer) return false
+  return !!t
+}
+
 /* ===== UI Helpers ===== */
 function showToast(msg, duration) {
   var el = document.getElementById('toast-container')
@@ -775,9 +780,8 @@ function renderResult(p) {
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
   html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📋 分组结果</div><div style="width:40px"></div></div>'
   html += '<div class="card header-card"><div class="flex-between"><div class="header-name">' + esc(t.name) + '</div>'
-  if (_canEdit(t)) html += '<button class="btn-icon" id="btn-edit-name" title="修改名称" style="font-size:16px;opacity:.6">✏️</button>'
+  if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name" title="修改名称" style="font-size:16px;opacity:.6">✏️</button>'
   html += '</div>'
-  if (!isCreator(t) && !_viewer) html += '<div class="text-xs text-secondary" style="margin-top:2px">👤 由其他用户创建（只读）</div>'
   html += '<div class="header-summary">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt])
   var totalMembers = 0; t.groups.forEach(function (g) { totalMembers += g.members.length })
   html += ' · ' + t.groups.length + '组 · ' + totalMembers + (isD ? '队' : '人') + '</div></div>'
@@ -801,16 +805,11 @@ function renderResult(p) {
 
   if (!_viewer) {
     html += '<div class="bottom-actions">'
-    if (_canEdit(t)) {
-      html += '<div class="action-row"><button class="btn-primary" id="btn-gen-schedule">📅 生成赛程</button>'
-      html += '<button class="btn-accent" id="btn-share">📤 分享</button></div>'
-      html += '<div class="action-row"><button class="btn-secondary" id="btn-export">💾 导出</button>'
-      html += '<button class="btn-secondary" id="btn-redraw">🔄 重新抽签</button></div>'
-    } else {
-      html += '<div class="action-row"><button class="btn-accent" id="btn-share">📤 分享</button>'
-      html += '<button class="btn-secondary" id="btn-export">💾 导出</button></div>'
-    }
-    html += '</div>'
+    html += '<div class="action-row"><button class="btn-primary" id="btn-gen-schedule">📅 生成赛程</button>'
+    html += '<button class="btn-accent" id="btn-share">📤 分享</button></div>'
+    html += '<div class="action-row"><button class="btn-secondary" id="btn-export">💾 导出</button>'
+    if (_canEdit(t)) html += '<button class="btn-secondary" id="btn-redraw">🔄 重新抽签</button>'
+    html += '</div></div>'
   }
   html += '</div>'
   return html
@@ -1019,7 +1018,7 @@ function renderSchedule(p) {
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
   html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📅 赛程</div><button class="btn-icon" id="btn-rankings">🏆</button></div>'
   html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div>'
-  if (_canEdit(t)) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">✏️</button>'
+  if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">✏️</button>'
   html += '</div></div>'
 
   if (fmt === 'nine-team') {
@@ -1074,7 +1073,7 @@ function renderGroupKnockoutSchedule(t) {
     html += renderMatchList(gm, t)
 
     var allGroupDone = (t.matches || []).filter(function (m) { return m.stage === 'group' }).every(function (m) { return m.status === 'finished' })
-    if (allGroupDone && !t.knockout && _canEdit(t)) {
+    if (allGroupDone && !t.knockout && _canScore(t)) {
       html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-ko">🏅 生成淘汰赛</button></div>'
     }
   } else {
@@ -1094,7 +1093,7 @@ function renderSingleKnockoutSchedule(t) {
     var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
     html += renderMatchList(gm, t)
     var allDone = gm.length > 0 && gm.every(function (m) { return m.status === 'finished' })
-    if (allDone && !t.knockout && _canEdit(t)) {
+    if (allDone && !t.knockout && _canScore(t)) {
       html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-ko">🏅 生成淘汰赛</button></div>'
     }
   } else {
@@ -1130,7 +1129,7 @@ function render9TeamSchedule(t) {
     var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === curGroup })
     html += renderMatchList(gm, t)
     var allGroupDone = is9TeamStageComplete(t, 'group')
-    if (allGroupDone && _canEdit(t)) {
+    if (allGroupDone && _canScore(t)) {
       var hasR6 = get9TeamStageMatches(t, 'round6').length > 0
       if (!hasR6) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-r6">⚡ 生成6强赛对阵</button></div>'
       var hasRanking = get9TeamStageMatches(t, 'ranking').length > 0
@@ -1142,7 +1141,7 @@ function render9TeamSchedule(t) {
     else {
       html += renderMatchList(r6m, t)
       var r6Done = is9TeamStageComplete(t, 'round6')
-      if (r6Done && _canEdit(t)) {
+      if (r6Done && _canScore(t)) {
         var hasRevival = get9TeamStageMatches(t, 'revival').length > 0
         if (!hasRevival) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-revival">🔄 生成复活赛</button></div>'
       }
@@ -1154,7 +1153,7 @@ function render9TeamSchedule(t) {
       html += '<div class="guide-tip">💡 复活赛采用抢7制</div>'
       html += renderMatchList(rvm, t)
       var rvDone = is9TeamStageComplete(t, 'revival')
-      if (rvDone && _canEdit(t)) {
+      if (rvDone && _canScore(t)) {
         var hasSemi = get9TeamStageMatches(t, 'semi').length > 0
         if (!hasSemi) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-draw-semi">🎲 4强赛抽签</button></div>'
       }
@@ -1165,7 +1164,7 @@ function render9TeamSchedule(t) {
     else {
       html += renderMatchList(sm, t)
       var semiDone = is9TeamStageComplete(t, 'semi')
-      if (semiDone && _canEdit(t)) {
+      if (semiDone && _canScore(t)) {
         var hasFinal = get9TeamStageMatches(t, 'final').length > 0
         if (!hasFinal) html += '<div class="text-center mt-md"><button class="btn-accent" id="btn-gen-finals">🏆 生成决赛</button></div>'
       }
@@ -1245,7 +1244,7 @@ function mountSchedule(p) {
     el.onclick = function () { _ps.curGroup = el.dataset.grp; render() }
   })
 
-  if (!_viewer && _canEdit(t)) {
+  if (_canScore(t)) {
     document.querySelectorAll('.match-card').forEach(function (el) {
       el.onclick = function () {
         var mid = el.dataset.mid
@@ -1386,7 +1385,7 @@ function mountSchedule(p) {
 function renderMatch(p) {
   var t = _t(p.id)
   if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
-  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
+  if (!_canScore(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
   var m = null, isKo = false, koRi = -1, koMi = -1
   if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
   else if (p.koRi !== undefined) { koRi = +p.koRi; koMi = +p.koMi; isKo = true; if (t.knockout && t.knockout[koRi]) m = t.knockout[koRi].matches[koMi] }
@@ -1637,10 +1636,13 @@ function initViewerMode() {
    ==================================================================== */
 window.addEventListener('hashchange', render)
 document.addEventListener('DOMContentLoaded', function () {
-  if (initViewerMode()) { render(); return }
-  var app = document.getElementById('app')
-  if (app) app.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;flex-direction:column"><div style="font-size:48px;margin-bottom:16px;animation:bounce 1s infinite">🎾</div><div style="color:rgba(255,255,255,.6);font-size:14px">加载中...</div></div>'
+  initViewerMode()
+  render()
+})
+
+function _onFirebaseSDKReady() {
+  if (_viewer) return
   if (typeof initFirebase === 'function') {
     initFirebase().then(function () { render() })
-  } else { render() }
-})
+  }
+}

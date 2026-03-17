@@ -38,15 +38,18 @@ function initFirebase() {
 
 function _syncFromCloud() {
   if (!_db) return Promise.resolve()
-  return _db.collection('tournaments').orderBy('createTime', 'desc').get().then(function (snapshot) {
+  return _db.collection('tournaments').get().then(function (snapshot) {
     var cloudList = []
     snapshot.forEach(function (doc) { cloudList.push(doc.data()) })
     var localList = getTournaments()
     var cloudIds = {}; cloudList.forEach(function (t) { cloudIds[t.id] = true })
+    var uid = getMyUserId()
     localList.forEach(function (lt) {
       if (!cloudIds[lt.id]) {
-        if (!lt.creatorId) lt.creatorId = getMyUserId()
-        cloudList.unshift(lt)
+        if (!lt.creatorId) lt.creatorId = uid
+        if (!lt.createTime) lt.createTime = Date.now()
+        lt.updateTime = Date.now()
+        cloudList.push(lt)
         _pushToCloud(lt)
       }
     })
