@@ -24,8 +24,9 @@ function _isFirebaseConfigured() {
 function initFirebase() {
   return new Promise(function (resolve) {
     if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) {
-      console.log('[Firebase] SDK not available or not configured')
-      resolve(); return
+      console.log('[Firebase] SDK not available, trying REST fallback')
+      _restFallbackSync().then(resolve).catch(function () { resolve() })
+      return
     }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig)
@@ -39,22 +40,69 @@ function initFirebase() {
       }).then(function () {
         _firebaseReady = true
         _flushSyncQueue()
-        console.log('[Firebase] Ready, synced')
+        console.log('[Firebase] Ready, synced, tournaments:', getTournaments().length)
         resolve()
       }).catch(function (e) {
-        console.error('[Firebase] Init error:', e)
-        resolve()
+        console.error('[Firebase] SDK init error, trying REST fallback:', e)
+        _restFallbackSync().then(resolve).catch(function () { resolve() })
       })
     } catch (e) {
-      console.error('[Firebase] Setup error:', e)
-      resolve()
+      console.error('[Firebase] Setup error, trying REST fallback:', e)
+      _restFallbackSync().then(resolve).catch(function () { resolve() })
     }
   })
 }
 
+function _restFallbackSync() {
+  if (!_isFirebaseConfigured()) return Promise.resolve()
+  var PROJECT = firebaseConfig.projectId
+  var API_KEY = firebaseConfig.apiKey
+  console.log('[REST] Fetching tournaments via REST API...')
+  return fetch('https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents/tournaments?pageSize=100')
+    .then(function (r) { return r.json() })
+    .then(function (data) {
+      var docs = data.documents || []
+      if (docs.length === 0) { console.log('[REST] No documents found'); return }
+      var cloudList = docs.map(function (doc) { return _firestoreDocToObj(doc.fields || {}) })
+      var localList = getTournaments()
+      var localIds = {}; localList.forEach(function (t) { localIds[t.id] = true })
+      cloudList.forEach(function (ct) {
+        if (ct.id && !localIds[ct.id]) localList.push(ct)
+      })
+      localList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localList))
+      _firebaseReady = true
+      console.log('[REST] Synced', docs.length, 'tournaments from cloud')
+    }).catch(function (e) {
+      console.error('[REST] Fallback failed:', e)
+    })
+}
+
+function _firestoreDocToObj(fields) {
+  var obj = {}
+  Object.keys(fields).forEach(function (k) {
+    obj[k] = _firestoreValueToJs(fields[k])
+  })
+  return obj
+}
+
+function _firestoreValueToJs(val) {
+  if (!val) return null
+  if (val.stringValue !== undefined) return val.stringValue
+  if (val.integerValue !== undefined) return parseInt(val.integerValue)
+  if (val.doubleValue !== undefined) return val.doubleValue
+  if (val.booleanValue !== undefined) return val.booleanValue
+  if (val.nullValue !== undefined) return null
+  if (val.arrayValue) return (val.arrayValue.values || []).map(_firestoreValueToJs)
+  if (val.mapValue) return _firestoreDocToObj(val.mapValue.fields || {})
+  return null
+}
+
 function _syncFromCloud() {
   if (!_db) return Promise.resolve()
+  console.log('[Firebase] Starting cloud sync...')
   return _db.collection('tournaments').get().then(function (snapshot) {
+    console.log('[Firebase] Got snapshot, size:', snapshot.size)
     var cloudMap = {}
     snapshot.forEach(function (doc) { cloudMap[doc.id] = doc.data() })
     var localList = getTournaments()

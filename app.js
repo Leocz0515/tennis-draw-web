@@ -1678,11 +1678,10 @@ window.addEventListener('hashchange', render)
 document.addEventListener('DOMContentLoaded', function () {
   initViewerMode()
   render()
-})
-
-function _onFirebaseSDKReady() {
-  if (_viewer) return
-  if (typeof initFirebase === 'function') {
-    initFirebase().then(function () { render() })
+  if (typeof initFirebase === 'function' && !_viewer) {
+    initFirebase().then(function () {
+      render()
+      console.log('[App] Rendered with cloud data')
+    })
   }
-}
+})
