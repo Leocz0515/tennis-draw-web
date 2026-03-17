@@ -2,25 +2,97 @@
    data.js — Storage, Algorithms, Utilities
    ======================================== */
 
-/* ===== Storage ===== */
+/* ===== Firebase Cloud Sync ===== */
+var _db = null
+var _userId = null
+var _firebaseReady = false
+
+function getMyUserId() { return _userId || localStorage.getItem('tennis_uid') || null }
+
+function isCreator(tournament) {
+  if (!tournament) return false
+  if (!tournament.creatorId) return true
+  return tournament.creatorId === getMyUserId()
+}
+
+function _isFirebaseConfigured() {
+  return typeof firebaseConfig !== 'undefined' && firebaseConfig && firebaseConfig.projectId && firebaseConfig.projectId !== '' && firebaseConfig.projectId !== 'YOUR_PROJECT_ID'
+}
+
+function initFirebase() {
+  return new Promise(function (resolve) {
+    if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) { resolve(); return }
+    try {
+      firebase.initializeApp(firebaseConfig)
+      _db = firebase.firestore()
+      firebase.auth().signInAnonymously().then(function (result) {
+        _userId = result.user.uid
+        localStorage.setItem('tennis_uid', _userId)
+        return _syncFromCloud()
+      }).then(function () {
+        _firebaseReady = true; resolve()
+      }).catch(function () { resolve() })
+    } catch (e) { resolve() }
+  })
+}
+
+function _syncFromCloud() {
+  if (!_db) return Promise.resolve()
+  return _db.collection('tournaments').orderBy('createTime', 'desc').get().then(function (snapshot) {
+    var cloudList = []
+    snapshot.forEach(function (doc) { cloudList.push(doc.data()) })
+    var localList = getTournaments()
+    var cloudIds = {}; cloudList.forEach(function (t) { cloudIds[t.id] = true })
+    localList.forEach(function (lt) {
+      if (!cloudIds[lt.id]) {
+        if (!lt.creatorId) lt.creatorId = getMyUserId()
+        cloudList.unshift(lt)
+        _pushToCloud(lt)
+      }
+    })
+    cloudList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudList))
+  })
+}
+
+function _pushToCloud(tournament) {
+  if (!_db || !tournament || !tournament.id) return
+  try { _db.collection('tournaments').doc(tournament.id).set(JSON.parse(JSON.stringify(tournament))) } catch (e) {}
+}
+
+function _deleteFromCloud(id) {
+  if (!_db || !id) return
+  try { _db.collection('tournaments').doc(id).delete() } catch (e) {}
+}
+
+function refreshFromCloud() {
+  if (!_db) return Promise.resolve()
+  return _syncFromCloud()
+}
+
+/* ===== Local Storage ===== */
 var STORAGE_KEY = 'tennis_tournaments_v2'
 
 function getTournaments() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] }
-  catch(e) { return [] }
+  catch (e) { return [] }
 }
 function getTournament(id) {
-  return getTournaments().find(function(t) { return t.id === id }) || null
+  return getTournaments().find(function (t) { return t.id === id }) || null
 }
 function saveTournament(tournament) {
+  if (!tournament.creatorId) tournament.creatorId = getMyUserId()
+  tournament.updateTime = Date.now()
   var list = getTournaments()
-  var idx = list.findIndex(function(t) { return t.id === tournament.id })
+  var idx = list.findIndex(function (t) { return t.id === tournament.id })
   if (idx >= 0) list[idx] = tournament; else list.unshift(tournament)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  _pushToCloud(tournament)
 }
 function deleteTournament(id) {
-  var list = getTournaments().filter(function(t) { return t.id !== id })
+  var list = getTournaments().filter(function (t) { return t.id !== id })
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  _deleteFromCloud(id)
 }
 
 /* ===== Utility ===== */
