@@ -86,6 +86,12 @@ function parseRoute() {
 function render() {
   var r = parseRoute(), app = document.getElementById('app')
   if (!app) return
+  var curId = r.params && r.params.id ? r.params.id : null
+  if (typeof _activeListeners !== 'undefined') {
+    Object.keys(_activeListeners).forEach(function (lid) {
+      if (lid !== curId) stopListenTournament(lid)
+    })
+  }
   var html = '', page = 'home'
   if (r.path === '/' || r.path === '') { html = renderHome(r.params); page = 'home' }
   else if (r.path === '/create') { html = renderCreate(r.params); page = 'create' }
@@ -817,6 +823,7 @@ function renderResult(p) {
 
 function mountResult(p) {
   var t = _t(p.id); if (!t || !t.groups) return
+  if (typeof listenToTournament === 'function') listenToTournament(p.id)
   _ps.expanded = _ps.expanded || {}
   document.getElementById('btn-back').onclick = function () { _viewer ? null : goBack() }
 
@@ -1220,6 +1227,7 @@ function renderKnockoutBracket(t) {
 
 function mountSchedule(p) {
   var t = _t(p.id); if (!t) return
+  if (typeof listenToTournament === 'function') listenToTournament(p.id)
   document.getElementById('btn-back').onclick = function () { goBack() }
   document.getElementById('btn-rankings').onclick = function () { navigate('/rankings?id=' + p.id) }
   var _enSch = document.getElementById('btn-edit-name-sch')
@@ -1463,7 +1471,9 @@ function mountMatch(p) {
 
     if (t.format === 'nine-team') update9TeamProgress(t)
 
-    saveTournament(t); showToast('比分已保存'); goBack()
+    saveTournament(t)
+    showToast('比分已保存 ✓')
+    goBack()
   }
 }
 
@@ -1604,6 +1614,7 @@ function renderStandingsTable(standings, qualifyCount) {
 }
 
 function mountRankings(p) {
+  if (typeof listenToTournament === 'function') listenToTournament(p.id)
   document.getElementById('btn-back').onclick = function () { goBack() }
   document.querySelectorAll('[data-rtab]').forEach(function (el) {
     el.onclick = function () { _ps.rankTab = el.dataset.rtab; render() }

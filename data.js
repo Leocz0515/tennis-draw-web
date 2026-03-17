@@ -6,6 +6,8 @@
 var _db = null
 var _userId = null
 var _firebaseReady = false
+var _activeListeners = {}
+var _syncQueue = []
 
 function getMyUserId() { return _userId || localStorage.getItem('tennis_uid') || null }
 
@@ -21,56 +23,118 @@ function _isFirebaseConfigured() {
 
 function initFirebase() {
   return new Promise(function (resolve) {
-    if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) { resolve(); return }
+    if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) {
+      console.log('[Firebase] SDK not available or not configured')
+      resolve(); return
+    }
     try {
-      firebase.initializeApp(firebaseConfig)
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig)
       _db = firebase.firestore()
+      console.log('[Firebase] Firestore initialized')
       firebase.auth().signInAnonymously().then(function (result) {
         _userId = result.user.uid
         localStorage.setItem('tennis_uid', _userId)
+        console.log('[Firebase] Authenticated as', _userId)
         return _syncFromCloud()
       }).then(function () {
-        _firebaseReady = true; resolve()
-      }).catch(function () { resolve() })
-    } catch (e) { resolve() }
+        _firebaseReady = true
+        _flushSyncQueue()
+        console.log('[Firebase] Ready, synced')
+        resolve()
+      }).catch(function (e) {
+        console.error('[Firebase] Init error:', e)
+        resolve()
+      })
+    } catch (e) {
+      console.error('[Firebase] Setup error:', e)
+      resolve()
+    }
   })
 }
 
 function _syncFromCloud() {
   if (!_db) return Promise.resolve()
   return _db.collection('tournaments').get().then(function (snapshot) {
-    var cloudList = []
-    snapshot.forEach(function (doc) { cloudList.push(doc.data()) })
+    var cloudMap = {}
+    snapshot.forEach(function (doc) { cloudMap[doc.id] = doc.data() })
     var localList = getTournaments()
-    var cloudIds = {}; cloudList.forEach(function (t) { cloudIds[t.id] = true })
     var uid = getMyUserId()
+    var pushCount = 0
     localList.forEach(function (lt) {
-      if (!cloudIds[lt.id]) {
+      if (!cloudMap[lt.id]) {
         if (!lt.creatorId) lt.creatorId = uid
         if (!lt.createTime) lt.createTime = Date.now()
         lt.updateTime = Date.now()
-        cloudList.push(lt)
+        cloudMap[lt.id] = lt
         _pushToCloud(lt)
+        pushCount++
       }
     })
-    cloudList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudList))
+    var merged = Object.keys(cloudMap).map(function (k) { return cloudMap[k] })
+    merged.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+    if (pushCount > 0) console.log('[Firebase] Pushed', pushCount, 'local tournaments to cloud')
+    console.log('[Firebase] Total tournaments:', merged.length)
+  }).catch(function (e) {
+    console.error('[Firebase] Sync error:', e)
   })
 }
 
 function _pushToCloud(tournament) {
-  if (!_db || !tournament || !tournament.id) return
-  try { _db.collection('tournaments').doc(tournament.id).set(JSON.parse(JSON.stringify(tournament))) } catch (e) {}
+  if (!tournament || !tournament.id) return Promise.resolve()
+  if (!_db || !_firebaseReady) {
+    _syncQueue.push(JSON.parse(JSON.stringify(tournament)))
+    return Promise.resolve()
+  }
+  var data = JSON.parse(JSON.stringify(tournament))
+  return _db.collection('tournaments').doc(tournament.id).set(data).then(function () {
+    console.log('[Firebase] Saved:', tournament.id, tournament.name)
+  }).catch(function (e) {
+    console.error('[Firebase] Push failed:', tournament.id, e)
+  })
+}
+
+function _flushSyncQueue() {
+  if (!_db || _syncQueue.length === 0) return
+  console.log('[Firebase] Flushing queue:', _syncQueue.length, 'items')
+  var q = _syncQueue.slice()
+  _syncQueue = []
+  q.forEach(function (t) { _pushToCloud(t) })
 }
 
 function _deleteFromCloud(id) {
   if (!_db || !id) return
-  try { _db.collection('tournaments').doc(id).delete() } catch (e) {}
+  _db.collection('tournaments').doc(id).delete().catch(function (e) {
+    console.error('[Firebase] Delete failed:', id, e)
+  })
 }
 
 function refreshFromCloud() {
   if (!_db) return Promise.resolve()
   return _syncFromCloud()
+}
+
+function listenToTournament(id) {
+  if (!_db || !id || _activeListeners[id]) return
+  _activeListeners[id] = _db.collection('tournaments').doc(id).onSnapshot(function (doc) {
+    if (!doc.exists) return
+    var cloudData = doc.data()
+    if (!cloudData || !cloudData.id) return
+    var localT = getTournament(id)
+    if (localT && localT.updateTime && cloudData.updateTime && cloudData.updateTime <= localT.updateTime) return
+    var list = getTournaments()
+    var idx = list.findIndex(function (t) { return t.id === id })
+    if (idx >= 0) list[idx] = cloudData; else list.unshift(cloudData)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+    if (typeof render === 'function') render()
+  })
+}
+
+function stopListenTournament(id) {
+  if (_activeListeners[id]) {
+    _activeListeners[id]()
+    delete _activeListeners[id]
+  }
 }
 
 /* ===== Local Storage ===== */

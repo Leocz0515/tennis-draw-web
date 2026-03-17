@@ -22,16 +22,14 @@
       'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
       'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js'
     ];
-    var loaded = 0;
-    libs.forEach(function(src){
-      var s = document.createElement('script');
-      s.src = src;
-      s.onload = function(){
-        loaded++;
-        if (loaded === libs.length && typeof _onFirebaseSDKReady === 'function') _onFirebaseSDKReady();
-      };
+    function loadNext(i){
+      if(i >= libs.length){ if(typeof _onFirebaseSDKReady==='function') _onFirebaseSDKReady(); return; }
+      var s=document.createElement('script'); s.src=libs[i];
+      s.onload=function(){ loadNext(i+1); };
+      s.onerror=function(){ loadNext(i+1); };
       document.head.appendChild(s);
-    });
+    }
+    loadNext(0);
   })();
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" async></script>
