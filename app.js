@@ -143,11 +143,13 @@ function renderHome() {
     html += '<div id="empty-init" class="empty-state"' + (ts.length > 0 ? ' style="display:none"' : '') + '><div class="empty-icon">🏆</div><div class="empty-text">还没有比赛记录</div><div class="empty-hint">点击下方按钮创建第一场比赛</div></div>'
     html += '<div id="search-empty" class="empty-state" style="display:none;padding:30px"><div class="empty-icon">🔍</div><div class="empty-text">未找到相关比赛</div><div class="empty-hint">试试其他关键词，或清空搜索</div></div>'
     ts.forEach(function (t) {
+      var mine = isCreator(t)
+      if (mine) html += '<div class="swipe-wrap" data-id="' + t.id + '">'
       html += '<div class="card tournament-card" data-id="' + t.id + '">'
       html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(TYPE[t.type] || '') + '</div></div>'
       html += '<div class="tournament-meta">'
       html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
-      if (_firebaseReady && !isCreator(t)) html += '<span class="tag" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);font-size:10px">他人创建</span>'
+      if (_firebaseReady && !mine) html += '<span class="tag" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);font-size:10px">他人创建</span>'
       if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
       if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
       var _mc = (t.matches || []).length, _fc = (t.matches || []).filter(function (m) { return m.status === 'finished' }).length
@@ -156,6 +158,7 @@ function renderHome() {
       html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
       html += '<div class="share-icon" data-share="' + t.id + '" title="分享">📤</div>'
       html += '</div>'
+      if (mine) html += '<div class="swipe-delete">删除</div></div>'
     })
     html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-new">➕ 新建比赛</button></div>'
   }
@@ -171,7 +174,8 @@ function _filterCards(q) {
   cards.forEach(function (c) {
     var n = c.querySelector('.tournament-name')
     var show = !kw || (n && n.textContent.toLowerCase().indexOf(kw) >= 0)
-    c.style.display = show ? '' : 'none'
+    var target = c.closest('.swipe-wrap') || c
+    target.style.display = show ? '' : 'none'
     if (show) visible++
   })
   var emI = document.getElementById('empty-init')
@@ -212,25 +216,72 @@ function mountHome() {
   }
   var btn = document.getElementById('btn-new')
   if (btn) btn.onclick = function () { navigate('/create') }
+
+  var _openSwipe = null
+  function _closeAllSwipes() {
+    if (_openSwipe) {
+      _openSwipe.style.transition = 'transform .3s ease'
+      _openSwipe.style.transform = ''
+      _openSwipe = null
+    }
+  }
+
   document.querySelectorAll('.tournament-card').forEach(function (el) {
     el.onclick = function (e) {
       if (e.target.dataset.share) return
+      if (_openSwipe) { _closeAllSwipes(); return }
       navigate('/result?id=' + el.dataset.id)
     }
-    var _lt
-    var _tid = el.dataset.id
-    function _tryDelete() {
-      var tt = getTournament(_tid)
-      if (!_canEdit(tt)) { showToast('只有创建者可以删除'); return }
+  })
+
+  document.querySelectorAll('.swipe-wrap').forEach(function (wrap) {
+    var card = wrap.querySelector('.tournament-card')
+    var tid = wrap.dataset.id
+    var startX = 0, startY = 0, dx = 0, isSwiping = false, isOpen = false
+
+    card.addEventListener('touchstart', function (e) {
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+      dx = 0
+      isSwiping = false
+      card.style.transition = 'none'
+    })
+
+    card.addEventListener('touchmove', function (e) {
+      var cx = e.touches[0].clientX - startX
+      var cy = e.touches[0].clientY - startY
+      if (!isSwiping && Math.abs(cy) > Math.abs(cx)) return
+      if (Math.abs(cx) > 8) isSwiping = true
+      if (!isSwiping) return
+      e.preventDefault()
+      if (isOpen) dx = Math.max(Math.min(cx, 80), -80) + (-80)
+      else dx = Math.min(Math.max(cx, -80), 0)
+      card.style.transform = 'translateX(' + dx + 'px)'
+    }, { passive: false })
+
+    card.addEventListener('touchend', function () {
+      card.style.transition = 'transform .3s ease'
+      if (dx < -40) {
+        if (_openSwipe && _openSwipe !== card) _closeAllSwipes()
+        card.style.transform = 'translateX(-80px)'
+        _openSwipe = card
+        isOpen = true
+      } else {
+        card.style.transform = ''
+        if (_openSwipe === card) _openSwipe = null
+        isOpen = false
+      }
+      dx = 0
+      isSwiping = false
+    })
+
+    wrap.querySelector('.swipe-delete').onclick = function (e) {
+      e.stopPropagation()
       showModal({
         title: '删除比赛', content: '确定删除这场比赛吗？此操作不可恢复。', confirmText: '删除',
-        onConfirm: function () { deleteTournament(_tid); render() }
+        onConfirm: function () { deleteTournament(tid); render() }
       })
     }
-    el.oncontextmenu = function (e) { e.preventDefault(); _tryDelete() }
-    el.addEventListener('touchstart', function () { _lt = setTimeout(_tryDelete, 800) })
-    el.addEventListener('touchend', function () { clearTimeout(_lt) })
-    el.addEventListener('touchmove', function () { clearTimeout(_lt) })
   })
   document.querySelectorAll('.share-icon').forEach(function (el) {
     el.onclick = function (e) {
