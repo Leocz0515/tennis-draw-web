@@ -80,17 +80,29 @@ function _syncFromCloud() {
   })
 }
 
+function _cleanForFirestore(obj) {
+  if (obj === null || obj === undefined) return null
+  if (typeof obj === 'number' && !isFinite(obj)) return 0
+  if (typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(_cleanForFirestore)
+  var clean = {}
+  Object.keys(obj).forEach(function (k) {
+    if (obj[k] !== undefined) clean[k] = _cleanForFirestore(obj[k])
+  })
+  return clean
+}
+
 function _pushToCloud(tournament) {
   if (!tournament || !tournament.id) return Promise.resolve()
   if (!_db || !_firebaseReady) {
     _syncQueue.push(JSON.parse(JSON.stringify(tournament)))
     return Promise.resolve()
   }
-  var data = JSON.parse(JSON.stringify(tournament))
+  var data = _cleanForFirestore(JSON.parse(JSON.stringify(tournament)))
   return _db.collection('tournaments').doc(tournament.id).set(data).then(function () {
     console.log('[Firebase] Saved:', tournament.id, tournament.name)
   }).catch(function (e) {
-    console.error('[Firebase] Push failed:', tournament.id, e)
+    console.error('[Firebase] Push failed:', tournament.id, e.code, e.message)
   })
 }
 
