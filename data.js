@@ -2,14 +2,20 @@
    data.js — Storage, Algorithms, Utilities
    ======================================== */
 
-/* ===== Firebase Cloud Sync ===== */
-var _db = null
-var _userId = null
+/* ===== Cloud Sync (Supabase REST API) ===== */
 var _firebaseReady = false
+var _userId = null
 var _activeListeners = {}
 var _syncQueue = []
 
-function getMyUserId() { return _userId || localStorage.getItem('tennis_uid') || null }
+function getMyUserId() {
+  if (!_userId) _userId = localStorage.getItem('tennis_uid')
+  if (!_userId) {
+    _userId = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+    localStorage.setItem('tennis_uid', _userId)
+  }
+  return _userId
+}
 
 function isCreator(tournament) {
   if (!tournament) return false
@@ -18,122 +24,91 @@ function isCreator(tournament) {
 }
 
 function _isFirebaseConfigured() {
-  return typeof firebaseConfig !== 'undefined' && firebaseConfig && firebaseConfig.projectId && firebaseConfig.projectId !== '' && firebaseConfig.projectId !== 'YOUR_PROJECT_ID'
+  return typeof supabaseConfig !== 'undefined' && supabaseConfig &&
+    supabaseConfig.url && supabaseConfig.url !== 'YOUR_SUPABASE_URL' &&
+    supabaseConfig.anonKey && supabaseConfig.anonKey !== 'YOUR_ANON_KEY'
+}
+
+function _sbHeaders(prefer) {
+  var h = {
+    'apikey': supabaseConfig.anonKey,
+    'Authorization': 'Bearer ' + supabaseConfig.anonKey,
+    'Content-Type': 'application/json'
+  }
+  if (prefer) h['Prefer'] = prefer
+  return h
+}
+
+function _sbFetch(path, opts) {
+  var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+  var timer = ctrl ? setTimeout(function () { ctrl.abort() }, 15000) : null
+  if (ctrl && opts) opts.signal = ctrl.signal
+  else if (ctrl) opts = { signal: ctrl.signal }
+  return fetch(supabaseConfig.url + path, opts || {}).then(function (r) {
+    if (timer) clearTimeout(timer)
+    return r
+  }).catch(function (e) {
+    if (timer) clearTimeout(timer)
+    throw e
+  })
 }
 
 function initFirebase() {
   return new Promise(function (resolve) {
-    var _done = false
-    function _finish() { if (!_done) { _done = true; resolve() } }
-    var _timeout = setTimeout(function () {
-      if (_done) return
-      console.warn('[Firebase] Init timeout (12s), trying REST fallback...')
-      _restFallbackSync().then(_finish).catch(_finish)
-    }, 12000)
-
-    function _complete() {
-      clearTimeout(_timeout)
-      _finish()
-    }
-
-    if (typeof firebase === 'undefined' || !firebase.apps || !_isFirebaseConfigured()) {
-      console.log('[Firebase] SDK not available, trying REST fallback')
-      clearTimeout(_timeout)
-      _restFallbackSync().then(_finish).catch(_finish)
+    if (!_isFirebaseConfigured()) {
+      console.log('[Cloud] Not configured')
+      resolve()
       return
     }
-    try {
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig)
-      _db = firebase.firestore()
-      console.log('[Firebase] Firestore initialized')
-      firebase.auth().signInAnonymously().then(function (result) {
-        _userId = result.user.uid
-        localStorage.setItem('tennis_uid', _userId)
-        console.log('[Firebase] Authenticated as', _userId)
-        return _syncFromCloud()
-      }).then(function () {
-        _firebaseReady = true
-        _flushSyncQueue()
-        console.log('[Firebase] Ready, synced, tournaments:', getTournaments().length)
-        _complete()
-      }).catch(function (e) {
-        console.error('[Firebase] SDK init error, trying REST fallback:', e)
-        clearTimeout(_timeout)
-        _restFallbackSync().then(_finish).catch(_finish)
-      })
-    } catch (e) {
-      console.error('[Firebase] Setup error, trying REST fallback:', e)
-      clearTimeout(_timeout)
-      _restFallbackSync().then(_finish).catch(_finish)
-    }
-  })
-}
-
-function _restFallbackSync() {
-  if (!_isFirebaseConfigured()) return Promise.resolve()
-  var PROJECT = firebaseConfig.projectId
-  console.log('[REST] Fetching tournaments via REST API...')
-  var url = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents/tournaments?pageSize=200'
-  var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
-  var timer = ctrl ? setTimeout(function () { ctrl.abort() }, 10000) : null
-  var opts = ctrl ? { signal: ctrl.signal } : {}
-  return fetch(url, opts).then(function (r) {
-    if (timer) clearTimeout(timer)
-    return r.json()
-  }).then(function (data) {
-    var docs = data.documents || []
-    console.log('[REST] Got', docs.length, 'documents')
-    if (docs.length === 0) return
-    var cloudList = docs.map(function (doc) { return _firestoreDocToObj(doc.fields || {}) })
-    var localList = getTournaments()
-    var localIds = {}; localList.forEach(function (t) { localIds[t.id] = true })
-    var added = 0
-    cloudList.forEach(function (ct) {
-      if (ct.id && !localIds[ct.id]) { localList.push(ct); added++ }
+    _userId = getMyUserId()
+    console.log('[Cloud] User:', _userId)
+    var _done = false
+    var _timer = setTimeout(function () {
+      if (!_done) { _done = true; console.warn('[Cloud] Sync timeout (15s)'); resolve() }
+    }, 15000)
+    _syncFromCloud().then(function () {
+      _firebaseReady = true
+      _flushSyncQueue()
+      console.log('[Cloud] Ready, tournaments:', getTournaments().length)
+      if (!_done) { _done = true; clearTimeout(_timer); resolve() }
+    }).catch(function (e) {
+      console.error('[Cloud] Init failed:', e.message || e)
+      if (!_done) { _done = true; clearTimeout(_timer); resolve() }
     })
-    localList.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(localList))
-    _firebaseReady = true
-    console.log('[REST] Synced, added', added, 'new tournaments, total:', localList.length)
-  }).catch(function (e) {
-    if (timer) clearTimeout(timer)
-    console.error('[REST] Fallback failed:', e.message || e)
   })
 }
 
-function _firestoreDocToObj(fields) {
-  var obj = {}
-  Object.keys(fields).forEach(function (k) {
-    obj[k] = _firestoreValueToJs(fields[k])
+function _cleanData(obj) {
+  if (obj === null || obj === undefined) return null
+  if (typeof obj === 'number' && !isFinite(obj)) return 0
+  if (typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(_cleanData)
+  var clean = {}
+  Object.keys(obj).forEach(function (k) {
+    if (obj[k] !== undefined) clean[k] = _cleanData(obj[k])
   })
-  return obj
-}
-
-function _firestoreValueToJs(val) {
-  if (!val) return null
-  if (val.stringValue !== undefined) return val.stringValue
-  if (val.integerValue !== undefined) return parseInt(val.integerValue)
-  if (val.doubleValue !== undefined) return val.doubleValue
-  if (val.booleanValue !== undefined) return val.booleanValue
-  if (val.nullValue !== undefined) return null
-  if (val.arrayValue) return (val.arrayValue.values || []).map(_firestoreValueToJs)
-  if (val.mapValue) return _firestoreDocToObj(val.mapValue.fields || {})
-  return null
+  return clean
 }
 
 function _syncFromCloud() {
-  if (!_db) return Promise.resolve()
-  console.log('[Firebase] Starting cloud sync...')
-  return _db.collection('tournaments').get().then(function (snapshot) {
-    console.log('[Firebase] Got snapshot, size:', snapshot.size)
+  console.log('[Cloud] Syncing...')
+  return _sbFetch('/rest/v1/tournaments?select=data&order=created_at.desc&limit=500', {
+    headers: _sbHeaders()
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return r.json()
+  }).then(function (rows) {
+    console.log('[Cloud] Got', rows.length, 'rows from cloud')
     var cloudMap = {}
-    snapshot.forEach(function (doc) { cloudMap[doc.id] = doc.data() })
+    rows.forEach(function (row) {
+      var d = row.data
+      if (d && d.id) cloudMap[d.id] = d
+    })
     var localList = getTournaments()
-    var uid = getMyUserId()
     var pushCount = 0
     localList.forEach(function (lt) {
       if (!cloudMap[lt.id]) {
-        if (!lt.creatorId) lt.creatorId = uid
+        if (!lt.creatorId) lt.creatorId = getMyUserId()
         if (!lt.createTime) lt.createTime = Date.now()
         lt.updateTime = Date.now()
         cloudMap[lt.id] = lt
@@ -144,81 +119,62 @@ function _syncFromCloud() {
     var merged = Object.keys(cloudMap).map(function (k) { return cloudMap[k] })
     merged.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
-    if (pushCount > 0) console.log('[Firebase] Pushed', pushCount, 'local tournaments to cloud')
-    console.log('[Firebase] Total tournaments:', merged.length)
-  }).catch(function (e) {
-    console.error('[Firebase] Sync error:', e)
+    console.log('[Cloud] Pushed', pushCount, ', total:', merged.length)
   })
-}
-
-function _cleanForFirestore(obj) {
-  if (obj === null || obj === undefined) return null
-  if (typeof obj === 'number' && !isFinite(obj)) return 0
-  if (typeof obj !== 'object') return obj
-  if (Array.isArray(obj)) return obj.map(_cleanForFirestore)
-  var clean = {}
-  Object.keys(obj).forEach(function (k) {
-    if (obj[k] !== undefined) clean[k] = _cleanForFirestore(obj[k])
-  })
-  return clean
 }
 
 function _pushToCloud(tournament) {
   if (!tournament || !tournament.id) return Promise.resolve()
-  if (!_db || !_firebaseReady) {
+  if (!_firebaseReady || !_isFirebaseConfigured()) {
     _syncQueue.push(JSON.parse(JSON.stringify(tournament)))
     return Promise.resolve()
   }
-  var data = _cleanForFirestore(JSON.parse(JSON.stringify(tournament)))
-  return _db.collection('tournaments').doc(tournament.id).set(data).then(function () {
-    console.log('[Firebase] Saved:', tournament.id, tournament.name)
+  var data = _cleanData(JSON.parse(JSON.stringify(tournament)))
+  var row = {
+    id: tournament.id,
+    name: tournament.name || '',
+    data: data,
+    creator_id: tournament.creatorId || getMyUserId(),
+    created_at: tournament.createTime || Date.now(),
+    updated_at: Date.now()
+  }
+  return _sbFetch('/rest/v1/tournaments', {
+    method: 'POST',
+    headers: _sbHeaders('resolution=merge-duplicates,return=minimal'),
+    body: JSON.stringify(row)
+  }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { throw new Error(t) })
+    console.log('[Cloud] Saved:', tournament.id)
   }).catch(function (e) {
-    console.error('[Firebase] Push failed:', tournament.id, e.code, e.message)
+    console.error('[Cloud] Push failed:', tournament.id, e.message || e)
   })
 }
 
 function _flushSyncQueue() {
-  if (!_db || _syncQueue.length === 0) return
-  console.log('[Firebase] Flushing queue:', _syncQueue.length, 'items')
+  if (_syncQueue.length === 0) return
+  console.log('[Cloud] Flushing queue:', _syncQueue.length, 'items')
   var q = _syncQueue.slice()
   _syncQueue = []
   q.forEach(function (t) { _pushToCloud(t) })
 }
 
 function _deleteFromCloud(id) {
-  if (!_db || !id) return
-  _db.collection('tournaments').doc(id).delete().catch(function (e) {
-    console.error('[Firebase] Delete failed:', id, e)
+  if (!_isFirebaseConfigured() || !id) return
+  _sbFetch('/rest/v1/tournaments?id=eq.' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: _sbHeaders('return=minimal')
+  }).catch(function (e) {
+    console.error('[Cloud] Delete failed:', id, e)
   })
 }
 
 function refreshFromCloud() {
-  if (!_db) return Promise.resolve()
+  if (!_isFirebaseConfigured()) return Promise.resolve()
   return _syncFromCloud()
 }
 
-function listenToTournament(id) {
-  if (!_db || !id || _activeListeners[id]) return
-  _activeListeners[id] = _db.collection('tournaments').doc(id).onSnapshot(function (doc) {
-    if (!doc.exists) return
-    var cloudData = doc.data()
-    if (!cloudData || !cloudData.id) return
-    var localT = getTournament(id)
-    if (localT && localT.updateTime && cloudData.updateTime && cloudData.updateTime <= localT.updateTime) return
-    var list = getTournaments()
-    var idx = list.findIndex(function (t) { return t.id === id })
-    if (idx >= 0) list[idx] = cloudData; else list.unshift(cloudData)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-    if (typeof render === 'function') render()
-  })
-}
-
-function stopListenTournament(id) {
-  if (_activeListeners[id]) {
-    _activeListeners[id]()
-    delete _activeListeners[id]
-  }
-}
+function listenToTournament() {}
+function stopListenTournament() {}
 
 /* ===== Local Storage ===== */
 var STORAGE_KEY = 'tennis_tournaments_v2'
