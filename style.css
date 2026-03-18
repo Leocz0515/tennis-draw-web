@@ -290,7 +290,7 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .set-hdr-del{width:28px;flex-shrink:0}
 .set-input-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
 .set-label{font-size:12px;font-weight:600;color:var(--text3);width:42px;flex-shrink:0;text-align:center}
-.set-num{width:0;flex:1;text-align:center;font-size:22px;font-weight:800;padding:10px 4px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);color:var(--text);outline:none;transition:var(--tr);-moz-appearance:textfield}
+.set-num{width:0;flex:1;text-align:center;font-size:22px;font-weight:800;padding:10px 4px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);color:var(--text);outline:none;transition:var(--tr);-moz-appearance:textfield;autocomplete:off;autocorrect:off;autocapitalize:off;spellcheck:false}
 .set-num::-webkit-inner-spin-button,.set-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .set-num:focus{border-color:var(--primary);background:rgba(124,92,252,.08);box-shadow:0 0 0 3px rgba(124,92,252,.15)}
 .set-sep{font-size:20px;font-weight:800;color:var(--text3);width:20px;text-align:center;flex-shrink:0}

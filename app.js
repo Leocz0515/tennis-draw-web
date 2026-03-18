@@ -1923,9 +1923,9 @@ function renderMatch(p) {
     var hasTb = _isTiebreak(s.a, s.b)
     html += '<div class="set-input-row" data-si="' + i + '">'
     html += '<div class="set-label">第' + (i + 1) + '盘</div>'
-    html += '<input class="set-num" id="sa-' + i + '" type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99" value="' + esc(s.a) + '" placeholder="0">'
+    html += '<input class="set-num" id="sa-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.a) + '" placeholder="0">'
     html += '<div class="set-sep">:</div>'
-    html += '<input class="set-num" id="sb-' + i + '" type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99" value="' + esc(s.b) + '" placeholder="0">'
+    html += '<input class="set-num" id="sb-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.b) + '" placeholder="0">'
     if (_ps.sets.length > 1) html += '<div class="set-del" data-del="' + i + '">✕</div>'
     else html += '<div class="set-del-ph"></div>'
     html += '</div>'
@@ -2000,18 +2000,22 @@ function mountMatch(p) {
     render()
   }
 
+  function _filterDigit(inp) {
+    var v = inp.value.replace(/[^0-9]/g, '')
+    if (v !== inp.value) inp.value = v
+    return v
+  }
+
   _ps.sets.forEach(function (s, i) {
     var sa = document.getElementById('sa-' + i)
     var sb = document.getElementById('sb-' + i)
     if (sa) sa.oninput = function () {
-      _ps.sets[i].a = this.value
-      if (_isTiebreak(_ps.sets[i].a, _ps.sets[i].b) || !_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) {
-        if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
-      }
+      _ps.sets[i].a = _filterDigit(this)
+      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
       _onSetChange('sa-' + i)
     }
     if (sb) sb.oninput = function () {
-      _ps.sets[i].b = this.value
+      _ps.sets[i].b = _filterDigit(this)
       if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
       _onSetChange('sb-' + i)
     }
@@ -2036,7 +2040,11 @@ function mountMatch(p) {
 
   if (_ps._focusId) {
     var fe = document.getElementById(_ps._focusId)
-    if (fe) { fe.focus(); if (fe.type === 'number') fe.select() }
+    if (fe) {
+      fe.focus()
+      var vl = fe.value.length
+      fe.setSelectionRange(vl, vl)
+    }
     _ps._focusId = null
   }
 
