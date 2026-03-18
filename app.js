@@ -6,7 +6,8 @@ var _ps = {} // page state (preserved within same page)
 var _currentPage = '' // track current page for state reset
 var _viewer = false
 var _viewerTournament = null
-var _matchDrafts = {} // persists score drafts across page navigations: { matchKey: {score1,score2,winnerId} }
+var _matchDrafts = {} // persists score drafts across page navigations
+var _renderLock = false // prevent render() while editing scores
 
 function _canEdit(t) {
   if (_viewer) return false
@@ -132,6 +133,7 @@ function parseRoute() {
 }
 
 function render() {
+  if (_renderLock) return
   var r = parseRoute(), app = document.getElementById('app')
   if (!app) return
   var curId = r.params && r.params.id ? r.params.id : null
@@ -154,23 +156,21 @@ function render() {
   if (page !== _currentPage) _ps = {}
   _currentPage = page
   app.innerHTML = html
-  requestAnimationFrame(function () {
-    if (page === 'home') mountHome(r.params)
-    else if (page === 'create') mountCreate(r.params)
-    else if (page === 'players') mountPlayers(r.params)
-    else if (page === 'pairing') mountPairing(r.params)
-    else if (page === 'settings') mountSettings(r.params)
-    else if (page === 'result') mountResult(r.params)
-    else if (page === 'schedule') mountSchedule(r.params)
-    else if (page === 'match') mountMatch(r.params)
-    else if (page === 'rankings') mountRankings(r.params)
-    var _rtr = document.getElementById('btn-retry-sync')
-    if (_rtr) _rtr.onclick = function () {
-      _rtr.textContent = '⏳ 同步中...'
-      _rtr.disabled = true
-      refreshFromCloud().then(function () { render() }).catch(function () { render() })
-    }
-  })
+  if (page === 'home') mountHome(r.params)
+  else if (page === 'create') mountCreate(r.params)
+  else if (page === 'players') mountPlayers(r.params)
+  else if (page === 'pairing') mountPairing(r.params)
+  else if (page === 'settings') mountSettings(r.params)
+  else if (page === 'result') mountResult(r.params)
+  else if (page === 'schedule') mountSchedule(r.params)
+  else if (page === 'match') mountMatch(r.params)
+  else if (page === 'rankings') mountRankings(r.params)
+  var _rtr = document.getElementById('btn-retry-sync')
+  if (_rtr) _rtr.onclick = function () {
+    _rtr.textContent = '⏳ 同步中...'
+    _rtr.disabled = true
+    refreshFromCloud().then(function () { render() }).catch(function () { render() })
+  }
 }
 
 function _t(id) { return _viewer ? _viewerTournament : getTournament(id) }
@@ -2131,7 +2131,8 @@ function _updateWinnerUI(wid) {
 
 function mountMatch(p) {
   var t = _t(p.id); if (!t) return
-  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
+  _renderLock = true
+  document.getElementById('btn-home').onclick = function () { _renderLock = false; location.hash = '/' }
   var _mk = _ps.matchKey
   var m = null
   if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
@@ -2141,8 +2142,6 @@ function mountMatch(p) {
     var v = inp.value.replace(/[^0-9]/g, '')
     if (v !== inp.value) inp.value = v
   }
-
-  var _rafId = 0
 
   function _syncSets() {
     if (!_ps.sets) return
@@ -2156,19 +2155,15 @@ function mountMatch(p) {
     })
   }
 
-  function _scheduleUpdate() {
+  function _onInput() {
     _syncSets()
-    if (_rafId) cancelAnimationFrame(_rafId)
-    _rafId = requestAnimationFrame(function () {
-      _rafId = 0
-      _updatePreview(_ps.sets, m)
-    })
+    _updatePreview(_ps.sets, m)
   }
 
   _ps.sets.forEach(function (s, i) {
     ;['sa-', 'sb-', 'tb1-', 'tb2-'].forEach(function (prefix) {
       var el = document.getElementById(prefix + i)
-      if (el) el.oninput = function () { _filterDigit(this); _scheduleUpdate() }
+      if (el) el.oninput = function () { _filterDigit(this); _onInput() }
     })
   })
 
@@ -2176,7 +2171,7 @@ function mountMatch(p) {
     _syncSets()
     _ps.sets.push({ a: '', b: '', tb1: '0', tb2: '0' })
     _ps._focusId = 'sa-' + (_ps.sets.length - 1)
-    render()
+    _renderLock = false; render()
   }
 
   document.querySelectorAll('[data-del]').forEach(function (el) {
@@ -2185,7 +2180,7 @@ function mountMatch(p) {
       var idx = +el.dataset.del
       _ps.sets.splice(idx, 1)
       if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb1: '0', tb2: '0' }]
-      render()
+      _renderLock = false; render()
     }
   })
 
@@ -2204,7 +2199,6 @@ function mountMatch(p) {
   })
 
   document.getElementById('btn-save').onclick = function () {
-    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = 0 }
     _ps.sets = _readSetsFromDOM()
     var parsed = _buildScoreFromSets(_ps.sets)
     if (!parsed) { showToast('请输入至少一盘比分'); return }
@@ -2235,6 +2229,7 @@ function mountMatch(p) {
     _ps.winnerId = undefined
     _ps.matchKey = null
     delete _matchDrafts[_mk]
+    _renderLock = false
     showToast('比分已保存 ✓')
     navigate('/schedule?id=' + p.id)
   }
@@ -2445,7 +2440,7 @@ function initViewerMode() {
 /* ====================================================================
    INIT
    ==================================================================== */
-window.addEventListener('hashchange', render)
+window.addEventListener('hashchange', function () { _renderLock = false; render() })
 document.addEventListener('DOMContentLoaded', function () {
   initViewerMode()
   _cloudSyncing = _isFirebaseConfigured() && !_viewer
