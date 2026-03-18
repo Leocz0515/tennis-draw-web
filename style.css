@@ -57,6 +57,9 @@ button,.btn{cursor:pointer;font-family:inherit;outline:none;transition:var(--tr)
 .btn-danger{background:linear-gradient(135deg,var(--danger),#FF7B7B);color:#fff;border-radius:var(--pill);padding:13px 26px;font-size:15px;font-weight:600}
 .btn-success{background:linear-gradient(135deg,var(--mint),#7BE8BE);color:#fff;border-radius:var(--pill);padding:13px 26px;font-size:15px;font-weight:600;box-shadow:0 4px 20px rgba(86,212,160,.25)}
 .btn-mini{padding:7px 16px;font-size:12px;border-radius:var(--pill)}
+.btn-undo{background:rgba(255,82,82,.12);color:var(--danger);border:1px solid rgba(255,82,82,.25);border-radius:var(--pill);padding:5px 14px;font-size:12px;font-weight:600}
+.btn-undo:active{background:rgba(255,82,82,.25);transform:scale(.96)}
+.text-right{text-align:right}
 .btn-block{display:block;width:100%}
 .btn-disabled{opacity:.35;pointer-events:none}
 .btn-icon{background:none;border:none;font-size:20px;padding:6px;opacity:.5;border-radius:50%}

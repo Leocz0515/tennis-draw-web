@@ -1266,6 +1266,7 @@ function render9TeamSchedule(t) {
     var r6m = get9TeamStageMatches(t, 'round6')
     if (r6m.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成小组赛</div></div>'
     else {
+      if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-r6">↩️ 撤回6强赛</button></div>'
       html += renderMatchList(r6m, t)
       var r6Done = is9TeamStageComplete(t, 'round6')
       if (r6Done && _canScore(t)) {
@@ -1277,6 +1278,7 @@ function render9TeamSchedule(t) {
     var rvm = get9TeamStageMatches(t, 'revival')
     if (rvm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成6强赛</div></div>'
     else {
+      if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-revival">↩️ 撤回复活赛</button></div>'
       html += '<div class="guide-tip">💡 复活赛采用抢7制</div>'
       html += renderMatchList(rvm, t)
       var rvDone = is9TeamStageComplete(t, 'revival')
@@ -1289,6 +1291,7 @@ function render9TeamSchedule(t) {
     var sm = get9TeamStageMatches(t, 'semi')
     if (sm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成复活赛并进行4强赛抽签</div></div>'
     else {
+      if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-semi">↩️ 撤回4强赛</button></div>'
       html += renderMatchList(sm, t)
       var semiDone = is9TeamStageComplete(t, 'semi')
       if (semiDone && _canScore(t)) {
@@ -1299,11 +1302,17 @@ function render9TeamSchedule(t) {
   } else if (curStage === 'final') {
     var fm = (t.matches || []).filter(function (m) { return m.stage === 'final' || m.stage === 'third' })
     if (fm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">请先完成4强赛</div></div>'
-    else html += renderMatchList(fm, t)
+    else {
+      if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-final">↩️ 撤回决赛</button></div>'
+      html += renderMatchList(fm, t)
+    }
   } else if (curStage === 'ranking') {
     var rkm = get9TeamStageMatches(t, 'ranking')
     if (rkm.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-icon">⏳</div><div class="empty-text">小组赛完成后生成排位赛</div></div>'
-    else html += renderMatchList(rkm, t)
+    else {
+      if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-ranking">↩️ 撤回排位赛</button></div>'
+      html += renderMatchList(rkm, t)
+    }
   }
   return html
 }
@@ -1331,6 +1340,7 @@ function renderMatchList(matches, t) {
 function renderKnockoutBracket(t) {
   if (!t.knockout || t.knockout.length === 0) return '<div class="text-center text-hint" style="padding:20px">淘汰赛尚未生成</div>'
   var html = ''
+  if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-ko">↩️ 撤回淘汰赛</button></div>'
   t.knockout.forEach(function (round, ri) {
     html += '<div class="round-header">' + esc(round.roundName) + '</div>'
     round.matches.forEach(function (m, mi) {
@@ -1613,6 +1623,77 @@ function mountSchedule(p) {
         showCustomMatchModal({ title: '决赛/三四名自定义', teams: allTeams, matchCount: 2, labels: ['决赛', '三四名决赛'], onConfirm: _doFinals })
       }}
     ])
+  }
+
+  /* ===== Undo / Revoke stages ===== */
+  function _undoConfirm(title, msg, fn) {
+    showModal({ title: title, content: msg, confirmText: '确认撤回', onConfirm: fn })
+  }
+  var _9stages = ['round6', 'revival', 'semi', 'final', 'third', 'ranking']
+
+  var ur6 = document.getElementById('btn-undo-r6')
+  if (ur6) ur6.onclick = function () {
+    _undoConfirm('撤回6强赛', '将删除6强赛及之后所有阶段比赛数据，确定撤回？', function () {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      t.matches = (t.matches || []).filter(function (m) { return _9stages.indexOf(m.stage) < 0 })
+      nt.stageStatus.round6 = 'pending'; nt.stageStatus.revival = 'pending'; nt.stageStatus.semi = 'pending'; nt.stageStatus.final = 'pending'; nt.stageStatus.ranking = 'pending'
+      nt.round6Winners = []; nt.round6Losers = []; nt.revivalQualifier = null; nt.semiFinalDrawn = false; nt.semiFinalWinners = []; nt.semiFinalLosers = []; nt.finalRankings = []
+      t.nineTeam = nt; saveTournament(t); showToast('已撤回6强赛'); _ps.curStage = 'group'; render()
+    })
+  }
+
+  var urv = document.getElementById('btn-undo-revival')
+  if (urv) urv.onclick = function () {
+    _undoConfirm('撤回复活赛', '将删除复活赛及之后所有阶段（不含6强赛）比赛数据，确定撤回？', function () {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      t.matches = (t.matches || []).filter(function (m) { return m.stage !== 'revival' && m.stage !== 'semi' && m.stage !== 'final' && m.stage !== 'third' })
+      nt.stageStatus.revival = 'pending'; nt.stageStatus.semi = 'pending'; nt.stageStatus.final = 'pending'
+      nt.revivalQualifier = null; nt.semiFinalDrawn = false; nt.semiFinalWinners = []; nt.semiFinalLosers = []; nt.finalRankings = []
+      nt.stageStatus.round6 = is9TeamStageComplete(t, 'round6') ? 'completed' : 'in_progress'
+      t.nineTeam = nt; saveTournament(t); showToast('已撤回复活赛'); _ps.curStage = 'round6'; render()
+    })
+  }
+
+  var usm = document.getElementById('btn-undo-semi')
+  if (usm) usm.onclick = function () {
+    _undoConfirm('撤回4强赛', '将删除4强赛及决赛数据，确定撤回？', function () {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      t.matches = (t.matches || []).filter(function (m) { return m.stage !== 'semi' && m.stage !== 'final' && m.stage !== 'third' })
+      nt.stageStatus.semi = 'pending'; nt.stageStatus.final = 'pending'
+      nt.semiFinalDrawn = false; nt.semiFinalWinners = []; nt.semiFinalLosers = []; nt.finalRankings = []
+      nt.stageStatus.revival = is9TeamStageComplete(t, 'revival') ? 'completed' : 'in_progress'
+      t.nineTeam = nt; saveTournament(t); showToast('已撤回4强赛'); _ps.curStage = 'revival'; render()
+    })
+  }
+
+  var ufn = document.getElementById('btn-undo-final')
+  if (ufn) ufn.onclick = function () {
+    _undoConfirm('撤回决赛', '将删除决赛和三四名决赛数据，确定撤回？', function () {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      t.matches = (t.matches || []).filter(function (m) { return m.stage !== 'final' && m.stage !== 'third' })
+      nt.stageStatus.final = 'pending'; nt.semiFinalWinners = []; nt.semiFinalLosers = []; nt.finalRankings = []
+      nt.stageStatus.semi = is9TeamStageComplete(t, 'semi') ? 'completed' : 'in_progress'
+      t.nineTeam = nt; saveTournament(t); showToast('已撤回决赛'); _ps.curStage = 'semi'; render()
+    })
+  }
+
+  var urk = document.getElementById('btn-undo-ranking')
+  if (urk) urk.onclick = function () {
+    _undoConfirm('撤回排位赛', '将删除排位赛（7-9名）数据，确定撤回？', function () {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      t.matches = (t.matches || []).filter(function (m) { return m.stage !== 'ranking' })
+      nt.stageStatus.ranking = 'pending'
+      t.nineTeam = nt; saveTournament(t); showToast('已撤回排位赛'); render()
+    })
+  }
+
+  var uko = document.getElementById('btn-undo-ko')
+  if (uko) uko.onclick = function () {
+    _undoConfirm('撤回淘汰赛', '将删除所有淘汰赛对阵和比分数据，确定撤回？', function () {
+      t = getTournament(p.id)
+      t.knockout = null
+      saveTournament(t); showToast('已撤回淘汰赛'); _ps.curTab = 'group'; render()
+    })
   }
 }
 
