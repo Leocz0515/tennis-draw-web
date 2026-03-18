@@ -2085,40 +2085,56 @@ function _readSetsFromDOM() {
 }
 
 function _updatePreview(sets, m) {
-  var parsed = _buildScoreFromSets(sets)
-  var n1 = m.team1 ? esc(m.team1.name) : 'TBD'
-  var n2 = m.team2 ? esc(m.team2.name) : 'TBD'
-  var previewEl = document.getElementById('score-preview-box')
-  if (previewEl) {
+  try {
+    if (!sets || !m) return
+    var parsed = _buildScoreFromSets(sets)
+    var n1 = m.team1 ? esc(m.team1.name) : 'TBD'
+    var n2 = m.team2 ? esc(m.team2.name) : 'TBD'
+    var previewEl = document.getElementById('score-preview-box')
+    if (previewEl) {
+      if (parsed) {
+        var ph = '<div class="score-preview-row"><span class="sp-name">' + n1 + '</span>'
+        parsed.sets.forEach(function (s) { ph += '<span class="sp-set' + (s.a > s.b ? ' sp-win' : '') + '">' + s.a + '</span>' })
+        ph += '<span class="sp-total">总' + parsed.t1Games + '局</span><span class="sp-net' + (parsed.t1Net > 0 ? ' sp-pos' : (parsed.t1Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t1Net > 0 ? '+' : '') + parsed.t1Net + '</span></div>'
+        ph += '<div class="score-preview-row"><span class="sp-name">' + n2 + '</span>'
+        parsed.sets.forEach(function (s) { ph += '<span class="sp-set' + (s.b > s.a ? ' sp-win' : '') + '">' + s.b + '</span>' })
+        ph += '<span class="sp-total">总' + parsed.t2Games + '局</span><span class="sp-net' + (parsed.t2Net > 0 ? ' sp-pos' : (parsed.t2Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t2Net > 0 ? '+' : '') + parsed.t2Net + '</span></div>'
+        previewEl.innerHTML = ph
+        previewEl.style.display = ''
+      } else {
+        previewEl.innerHTML = ''
+        previewEl.style.display = 'none'
+      }
+    }
     if (parsed) {
-      var ph = '<div class="score-preview-row"><span class="sp-name">' + n1 + '</span>'
-      parsed.sets.forEach(function (s) { ph += '<span class="sp-set' + (s.a > s.b ? ' sp-win' : '') + '">' + s.a + '</span>' })
-      ph += '<span class="sp-total">总' + parsed.t1Games + '局</span><span class="sp-net' + (parsed.t1Net > 0 ? ' sp-pos' : (parsed.t1Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t1Net > 0 ? '+' : '') + parsed.t1Net + '</span></div>'
-      ph += '<div class="score-preview-row"><span class="sp-name">' + n2 + '</span>'
-      parsed.sets.forEach(function (s) { ph += '<span class="sp-set' + (s.b > s.a ? ' sp-win' : '') + '">' + s.b + '</span>' })
-      ph += '<span class="sp-total">总' + parsed.t2Games + '局</span><span class="sp-net' + (parsed.t2Net > 0 ? ' sp-pos' : (parsed.t2Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t2Net > 0 ? '+' : '') + parsed.t2Net + '</span></div>'
-      previewEl.innerHTML = ph
-      previewEl.style.display = ''
-    } else {
-      previewEl.innerHTML = ''
-      previewEl.style.display = 'none'
+      var wid = null
+      if (parsed.autoWinner === 1 && m.team1) wid = m.team1.id
+      else if (parsed.autoWinner === 2 && m.team2) wid = m.team2.id
+      if (wid && _ps.winnerId !== wid) {
+        _ps.winnerId = wid
+        if (_ps.matchKey) { if (!_matchDrafts[_ps.matchKey]) _matchDrafts[_ps.matchKey] = {}; _matchDrafts[_ps.matchKey].winnerId = wid }
+        _updateWinnerUI(wid)
+      }
     }
-  }
-  if (parsed && m) {
-    var wid = null
-    if (parsed.autoWinner === 1 && m.team1) wid = m.team1.id
-    else if (parsed.autoWinner === 2 && m.team2) wid = m.team2.id
-    if (wid) {
-      _ps.winnerId = wid
-      if (_ps.matchKey) { if (!_matchDrafts[_ps.matchKey]) _matchDrafts[_ps.matchKey] = {}; _matchDrafts[_ps.matchKey].winnerId = wid }
-      document.querySelectorAll('[data-wid]').forEach(function (el) {
-        if (el.dataset.wid === wid) { el.classList.add('selected'); el.innerHTML = '<div class="winner-name">' + el.querySelector('.winner-name').textContent + '</div><div class="winner-check">✓</div>' }
-        else { el.classList.remove('selected'); var wn = el.querySelector('.winner-name'); el.innerHTML = '<div class="winner-name">' + wn.textContent + '</div>' }
-      })
+    var autoHint = document.getElementById('winner-auto-hint')
+    if (autoHint) autoHint.style.display = (parsed && parsed.autoWinner) ? '' : 'none'
+  } catch (e) { console.warn('preview update error:', e) }
+}
+
+function _updateWinnerUI(wid) {
+  document.querySelectorAll('[data-wid]').forEach(function (el) {
+    var isW = el.dataset.wid === wid
+    el.classList.toggle('selected', isW)
+    var ck = el.querySelector('.winner-check')
+    if (isW && !ck) {
+      var span = document.createElement('div')
+      span.className = 'winner-check'
+      span.textContent = '✓'
+      el.appendChild(span)
+    } else if (!isW && ck) {
+      ck.parentNode.removeChild(ck)
     }
-  }
-  var autoHint = document.getElementById('winner-auto-hint')
-  if (autoHint) autoHint.style.display = (parsed && parsed.autoWinner) ? '' : 'none'
+  })
 }
 
 function mountMatch(p) {
@@ -2135,7 +2151,11 @@ function mountMatch(p) {
     return v
   }
 
+  var _rafId = 0
+  var _draftTimer = 0
+
   function _syncSets() {
+    if (!_ps.sets) return
     _ps.sets.forEach(function (s, i) {
       var sa = document.getElementById('sa-' + i), sb = document.getElementById('sb-' + i)
       if (sa) s.a = sa.value.replace(/[^0-9]/g, '')
@@ -2144,10 +2164,15 @@ function mountMatch(p) {
       if (t1) s.tb1 = t1.value.replace(/[^0-9]/g, '')
       if (t2) s.tb2 = t2.value.replace(/[^0-9]/g, '')
     })
-    _saveSetsToState(_mk)
+  }
+
+  function _deferDraft() {
+    clearTimeout(_draftTimer)
+    _draftTimer = setTimeout(function () { _saveSetsToState(_mk) }, 300)
   }
 
   function _ensureTbRow(i) {
+    if (!_ps.sets || !_ps.sets[i]) return
     var setRow = document.querySelector('.set-input-row[data-si="' + i + '"]')
     if (!setRow) return
     var existing = document.querySelector('.tb-row[data-si="' + i + '"]')
@@ -2168,21 +2193,26 @@ function mountMatch(p) {
   function _bindTb(i) {
     var tb1 = document.getElementById('tb1-' + i)
     var tb2 = document.getElementById('tb2-' + i)
-    if (tb1) { tb1.oninput = function () { _filterDigit(this); _syncSets(); _updatePreview(_ps.sets, m) } }
-    if (tb2) { tb2.oninput = function () { _filterDigit(this); _syncSets(); _updatePreview(_ps.sets, m) } }
+    if (tb1) { tb1.oninput = function () { _filterDigit(this); _scheduleUpdate(-1) } }
+    if (tb2) { tb2.oninput = function () { _filterDigit(this); _scheduleUpdate(-1) } }
   }
 
-  function _onInput(idx) {
+  function _scheduleUpdate(idx) {
     _syncSets()
-    _ensureTbRow(idx)
-    _updatePreview(_ps.sets, m)
+    if (idx >= 0) _ensureTbRow(idx)
+    if (_rafId) cancelAnimationFrame(_rafId)
+    _rafId = requestAnimationFrame(function () {
+      _rafId = 0
+      _updatePreview(_ps.sets, m)
+      _deferDraft()
+    })
   }
 
   _ps.sets.forEach(function (s, i) {
     var sa = document.getElementById('sa-' + i)
     var sb = document.getElementById('sb-' + i)
-    if (sa) { sa.oninput = function () { _filterDigit(this); _onInput(i) } }
-    if (sb) { sb.oninput = function () { _filterDigit(this); _onInput(i) } }
+    if (sa) { sa.oninput = function () { _filterDigit(this); _scheduleUpdate(i) } }
+    if (sb) { sb.oninput = function () { _filterDigit(this); _scheduleUpdate(i) } }
     _bindTb(i)
   })
 
@@ -2214,10 +2244,17 @@ function mountMatch(p) {
   }
 
   document.querySelectorAll('[data-wid]').forEach(function (el) {
-    el.onclick = function () { _ps.winnerId = el.dataset.wid; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = el.dataset.wid }; render() }
+    el.onclick = function () {
+      _syncSets()
+      _ps.winnerId = el.dataset.wid
+      if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = el.dataset.wid }
+      _updateWinnerUI(el.dataset.wid)
+    }
   })
 
   document.getElementById('btn-save').onclick = function () {
+    clearTimeout(_draftTimer)
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = 0 }
     _ps.sets = _readSetsFromDOM()
     _saveSetsToState(_mk)
     var parsed = _buildScoreFromSets(_ps.sets)
