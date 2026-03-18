@@ -1872,7 +1872,7 @@ function _buildScoreFromSets(sets) {
 
 function _isTiebreak(a, b) {
   var x = parseInt(a) || 0, y = parseInt(b) || 0
-  return (x === 7 && y === 6) || (x === 6 && y === 7)
+  return (x === 7 && y === 6) || (x === 6 && y === 7) || (x === 4 && y === 3) || (x === 3 && y === 4)
 }
 
 function renderMatch(p) {
