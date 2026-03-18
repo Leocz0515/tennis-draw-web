@@ -1924,17 +1924,15 @@ function mountSchedule(p) {
    PAGE: MATCH (Score Entry)
    ==================================================================== */
 function _initSetsFromScore(scoreStr) {
-  if (!scoreStr) return [{ a: '', b: '', tb: '' }]
+  if (!scoreStr) return [{ a: '', b: '', tb1: '', tb2: '' }]
   var sets = []
   String(scoreStr).split(/[,，]/).forEach(function (s) {
     var m = s.trim().match(/(\d+)\s*[-:：]\s*(\d+)(?:\s*\((\d+)\s*[-:：]\s*(\d+)\))?/)
     if (m) {
-      var tb = ''
-      if (m[3] && m[4]) tb = m[3] + '-' + m[4]
-      sets.push({ a: m[1], b: m[2], tb: tb })
+      sets.push({ a: m[1], b: m[2], tb1: m[3] || '', tb2: m[4] || '' })
     }
   })
-  return sets.length > 0 ? sets : [{ a: '', b: '', tb: '' }]
+  return sets.length > 0 ? sets : [{ a: '', b: '', tb1: '', tb2: '' }]
 }
 
 function _buildScoreFromSets(sets) {
@@ -1944,11 +1942,10 @@ function _buildScoreFromSets(sets) {
     if (s.a === '' || s.b === '') continue
     var a = parseInt(s.a) || 0, b = parseInt(s.b) || 0
     var tbStr = ''
-    if (s.tb) {
-      var tbm = String(s.tb).match(/(\d+)\s*[-:：]?\s*(\d+)/)
-      if (tbm) tbStr = '(' + tbm[1] + '-' + tbm[2] + ')'
+    if (s.tb1 !== '' && s.tb2 !== '') {
+      tbStr = '(' + (parseInt(s.tb1) || 0) + '-' + (parseInt(s.tb2) || 0) + ')'
     }
-    valid.push({ a: a, b: b, tbStr: tbStr, tb: s.tb })
+    valid.push({ a: a, b: b, tbStr: tbStr, tb1: s.tb1, tb2: s.tb2 })
     t1G += a; t2G += b
     if (a > b) t1S++; else if (b > a) t2S++
   }
@@ -1974,6 +1971,7 @@ function renderMatch(p) {
 
   var _mk = p.matchId || ('ko_' + p.koRi + '_' + p.koMi)
   var _draft = _matchDrafts[_mk]
+  if (_ps.matchKey !== _mk) { _ps.sets = null; _ps.winnerId = undefined }
   _ps.matchKey = _mk
   if (!_ps.sets) {
     var existingScore = (_draft && _draft.scoreInput) ? _draft.scoreInput : (m.score1 || '')
@@ -2019,8 +2017,10 @@ function renderMatch(p) {
     html += '</div>'
     if (hasTb) {
       html += '<div class="tb-row" data-si="' + i + '">'
-      html += '<div class="tb-label">🎯 抢七小分</div>'
-      html += '<input class="set-num tb-num" id="tb-' + i + '" type="text" inputmode="numeric" value="' + esc(s.tb) + '" placeholder="如 7-5">'
+      html += '<div class="tb-label">🎯 抢七</div>'
+      html += '<input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb1) + '" placeholder="0">'
+      html += '<div class="tb-sep">:</div>'
+      html += '<input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb2) + '" placeholder="0">'
       html += '</div>'
     }
   })
@@ -2063,7 +2063,7 @@ function _saveSetsToState(mk) {
   var scoreStr = _ps.sets.map(function (s) {
     if (s.a === '' && s.b === '') return ''
     var base = (s.a || '0') + '-' + (s.b || '0')
-    if (s.tb) base += '(' + s.tb + ')'
+    if (s.tb1 !== '' && s.tb2 !== '') base += '(' + (s.tb1 || '0') + '-' + (s.tb2 || '0') + ')'
     return base
   }).filter(Boolean).join(', ')
   if (mk) { if (!_matchDrafts[mk]) _matchDrafts[mk] = {}; _matchDrafts[mk].scoreInput = scoreStr }
@@ -2099,20 +2099,22 @@ function mountMatch(p) {
     var sb = document.getElementById('sb-' + i)
     if (sa) sa.oninput = function () {
       _ps.sets[i].a = _filterDigit(this)
-      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
+      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) { _ps.sets[i].tb1 = ''; _ps.sets[i].tb2 = '' }
       _onSetChange('sa-' + i)
     }
     if (sb) sb.oninput = function () {
       _ps.sets[i].b = _filterDigit(this)
-      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
+      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) { _ps.sets[i].tb1 = ''; _ps.sets[i].tb2 = '' }
       _onSetChange('sb-' + i)
     }
-    var tb = document.getElementById('tb-' + i)
-    if (tb) tb.oninput = function () { _ps.sets[i].tb = this.value; _saveSetsToState(_mk) }
+    var tb1 = document.getElementById('tb1-' + i)
+    var tb2 = document.getElementById('tb2-' + i)
+    if (tb1) tb1.oninput = function () { _ps.sets[i].tb1 = _filterDigit(this); _saveSetsToState(_mk); _onSetChange('tb1-' + i) }
+    if (tb2) tb2.oninput = function () { _ps.sets[i].tb2 = _filterDigit(this); _saveSetsToState(_mk); _onSetChange('tb2-' + i) }
   })
 
   document.getElementById('btn-add-set').onclick = function () {
-    _ps.sets.push({ a: '', b: '', tb: '' })
+    _ps.sets.push({ a: '', b: '', tb1: '', tb2: '' })
     _ps._focusId = 'sa-' + (_ps.sets.length - 1)
     _saveSetsToState(_mk); render()
   }
@@ -2121,7 +2123,7 @@ function mountMatch(p) {
     el.onclick = function () {
       var idx = +el.dataset.del
       _ps.sets.splice(idx, 1)
-      if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb: '' }]
+      if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb1: '', tb2: '' }]
       _saveSetsToState(_mk); _onSetChange(null)
     }
   })
