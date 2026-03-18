@@ -89,6 +89,8 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 
 /* Badges */
 .score-badge{background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;border-radius:var(--pill);padding:2px 10px;font-size:12px;font-weight:700}
+.score-badge.badge-pos{background:linear-gradient(135deg,#43A047,#66BB6A)}
+.score-badge.badge-neg{background:linear-gradient(135deg,#E53935,#EF5350)}
 .seed-badge{background:linear-gradient(135deg,var(--accent),#FF9BB3);color:#fff;border-radius:var(--pill);padding:2px 10px;font-size:11px;font-weight:700;margin-left:4px}
 
 /* Empty */

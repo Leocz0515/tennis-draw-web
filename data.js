@@ -428,6 +428,60 @@ function calculateStandings(matches, members) {
   })
 }
 
+/* ===== Four-Player Rotation Doubles ===== */
+function generateFourRotationMatches(players) {
+  if (players.length !== 4) return { matches: [] }
+  var p = players.map(function (pl) { return { id: pl.id, name: pl.name, score: pl.score || 0 } })
+  var rounds = [
+    { r: 1, t1: [p[0], p[1]], t2: [p[2], p[3]] },
+    { r: 2, t1: [p[0], p[2]], t2: [p[1], p[3]] },
+    { r: 3, t1: [p[0], p[3]], t2: [p[1], p[2]] }
+  ]
+  var matches = []
+  rounds.forEach(function (rd) {
+    var t1Name = rd.t1[0].name + ' & ' + rd.t1[1].name
+    var t2Name = rd.t2[0].name + ' & ' + rd.t2[1].name
+    matches.push({
+      id: makeMatchId('fr'),
+      stage: 'rotation',
+      round: rd.r,
+      matchLabel: '第' + rd.r + '轮',
+      groupName: '轮转',
+      team1: { id: 'fr_' + rd.r + '_1', name: t1Name, members: [rd.t1[0].id, rd.t1[1].id] },
+      team2: { id: 'fr_' + rd.r + '_2', name: t2Name, members: [rd.t2[0].id, rd.t2[1].id] },
+      score1: '', score2: '', winnerId: null, status: 'pending'
+    })
+  })
+  return { matches: matches }
+}
+
+function calculateFourRotationStandings(matches, players) {
+  var map = {}
+  players.forEach(function (pl) {
+    map[pl.id] = { id: pl.id, name: pl.name, score: pl.score || 0, played: 0, wins: 0, losses: 0, gamesFor: 0, gamesAgainst: 0 }
+  })
+  matches.filter(function (m) { return m.status === 'finished' && m.winnerId }).forEach(function (m) {
+    var s1 = parseNetGames(m.score1)
+    var winTeam = m.winnerId === m.team1.id ? m.team1 : m.team2
+    var loseTeam = m.winnerId === m.team1.id ? m.team2 : m.team1
+    var winGames = m.winnerId === m.team1.id ? s1 : parseNetGames(m.score2)
+    var loseGames = m.winnerId === m.team1.id ? parseNetGames(m.score2) : s1
+    ;(winTeam.members || []).forEach(function (pid) {
+      if (map[pid]) { map[pid].played++; map[pid].wins++; map[pid].gamesFor += winGames.won; map[pid].gamesAgainst += winGames.lost }
+    })
+    ;(loseTeam.members || []).forEach(function (pid) {
+      if (map[pid]) { map[pid].played++; map[pid].losses++; map[pid].gamesFor += loseGames.won; map[pid].gamesAgainst += loseGames.lost }
+    })
+  })
+  return Object.values(map).sort(function (a, b) {
+    if (b.wins !== a.wins) return b.wins - a.wins
+    var netA = a.gamesFor - a.gamesAgainst, netB = b.gamesFor - b.gamesAgainst
+    if (netB !== netA) return netB - netA
+    if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor
+    return b.score - a.score
+  })
+}
+
 /* ===== Knockout Bracket ===== */
 function makeKoMatch(t1, t2) {
   return {id:makeMatchId('ko'),
