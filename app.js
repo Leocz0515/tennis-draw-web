@@ -72,6 +72,44 @@ function showActionSheet(items, onCancel) {
   document.getElementById('as-mask').onclick = function (e) { if (e.target.id === 'as-mask') { root.innerHTML = ''; if (onCancel) onCancel() } }
 }
 
+function showCustomMatchModal(opts) {
+  var root = document.getElementById('modal-root')
+  var teams = opts.teams, mc = opts.matchCount
+  var html = '<div class="modal-mask" id="modal-mask"><div class="modal-content" style="max-height:85vh;overflow-y:auto">'
+  html += '<div class="modal-title">' + esc(opts.title || '自定义对阵') + '</div>'
+  html += '<div style="padding:0 4px 16px">'
+  for (var i = 0; i < mc; i++) {
+    var lb = opts.labels ? opts.labels[i] : ('第' + (i + 1) + '场')
+    html += '<div class="card" style="padding:12px;margin-bottom:8px">'
+    html += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:var(--primary-light)">' + esc(lb) + '</div>'
+    html += '<div style="display:flex;align-items:center;gap:8px">'
+    html += '<select class="input-field" id="cm-a-' + i + '" style="flex:1"><option value="">选择</option>'
+    teams.forEach(function (t) { html += '<option value="' + t.id + '">' + esc(t.name) + '</option>' })
+    html += '</select><span style="color:var(--text3);font-weight:700">VS</span>'
+    html += '<select class="input-field" id="cm-b-' + i + '" style="flex:1"><option value="">选择</option>'
+    teams.forEach(function (t) { html += '<option value="' + t.id + '">' + esc(t.name) + '</option>' })
+    html += '</select></div></div>'
+  }
+  html += '</div><div class="modal-actions"><button class="btn-secondary" id="modal-cancel">取消</button><button class="btn-primary" id="modal-confirm">确定</button></div>'
+  html += '</div></div>'
+  root.innerHTML = html
+  document.getElementById('modal-confirm').onclick = function () {
+    var pairs = [], used = {}
+    for (var i = 0; i < mc; i++) {
+      var a = document.getElementById('cm-a-' + i).value, b = document.getElementById('cm-b-' + i).value
+      if (!a || !b) { showToast('请选择所有对阵'); return }
+      if (a === b) { showToast('不能选择相同队伍'); return }
+      if (used[a] || used[b]) { showToast('每个队伍只能出现一次'); return }
+      used[a] = true; used[b] = true
+      pairs.push([teams.find(function (t) { return t.id === a }), teams.find(function (t) { return t.id === b })])
+    }
+    root.innerHTML = ''
+    if (opts.onConfirm) opts.onConfirm(pairs)
+  }
+  document.getElementById('modal-cancel').onclick = function () { root.innerHTML = '' }
+  document.getElementById('modal-mask').onclick = function (e) { if (e.target.id === 'modal-mask') root.innerHTML = '' }
+}
+
 /* ===== Router ===== */
 var _routes = []
 function navigate(path) { _routes.push(location.hash); location.hash = path }
@@ -1358,33 +1396,89 @@ function mountSchedule(p) {
   /* Group+Knockout: generate knockout */
   var gko = document.getElementById('btn-gen-ko')
   if (gko) gko.onclick = function () {
-    t = getTournament(p.id)
-    if (t.format === 'group-knockout') {
-      var gs = {}
-      ;(t.groups || []).forEach(function (g) {
-        var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
-        gs[g.name] = calculateStandings(gm, g.members)
-      })
-      t.knockout = generateKnockoutBracket(gs, t.settings.qualifyCount || 2, t.settings.hasThirdPlace)
-    } else if (t.format === 'single-knockout') {
-      var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
-      var members = t.groups[0] ? t.groups[0].members : []
-      var st = calculateStandings(gm, members)
-      t.knockout = generateSingleKnockoutBracket(st, t.settings.koTeamCount || 4, t.settings.koRule || 'cross', t.settings.hasThirdPlace)
+    function _getKoTeams() {
+      t = getTournament(p.id)
+      var teams = []
+      if (t.format === 'group-knockout') {
+        ;(t.groups || []).forEach(function (g) {
+          var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name })
+          var st = calculateStandings(gm, g.members)
+          st.slice(0, t.settings.qualifyCount || 2).forEach(function (s) { teams.push(s) })
+        })
+      } else if (t.format === 'single-knockout') {
+        var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
+        var members = t.groups[0] ? t.groups[0].members : []
+        var st = calculateStandings(gm, members)
+        st.slice(0, t.settings.koTeamCount || 4).forEach(function (s) { teams.push(s) })
+      }
+      return teams
     }
-    saveTournament(t); showToast('淘汰赛已生成'); _ps.curTab = 'knockout'; render()
+    function _doKo(customPairs) {
+      t = getTournament(p.id)
+      if (customPairs) {
+        function rn(c) { if (c === 1) return '决赛'; if (c === 2) return '半决赛'; if (c === 4) return '四分之一决赛'; return (c * 2) + '进' + c }
+        var first = customPairs.map(function (pr) { return makeKoMatch(pr[0], pr[1]) })
+        var rounds = [{ roundName: rn(first.length), matches: first }]
+        var cur = first
+        while (cur.length > 1) { var nxt = []; for (var i = 0; i < cur.length; i += 2) nxt.push(makeKoMatch(null, null)); rounds.push({ roundName: rn(nxt.length), matches: nxt }); cur = nxt }
+        if (t.settings.hasThirdPlace && rounds.length >= 2) rounds.push({ roundName: '三四名决赛', isThirdPlace: true, matches: [makeKoMatch(null, null)] })
+        t.knockout = rounds
+      } else {
+        if (t.format === 'group-knockout') {
+          var gs = {}
+          ;(t.groups || []).forEach(function (g) { var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' && m.groupName === g.name }); gs[g.name] = calculateStandings(gm, g.members) })
+          t.knockout = generateKnockoutBracket(gs, t.settings.qualifyCount || 2, t.settings.hasThirdPlace)
+        } else if (t.format === 'single-knockout') {
+          var gm = (t.matches || []).filter(function (m) { return m.stage === 'group' })
+          var members = t.groups[0] ? t.groups[0].members : []
+          var st = calculateStandings(gm, members)
+          t.knockout = generateSingleKnockoutBracket(st, t.settings.koTeamCount || 4, t.settings.koRule || 'cross', t.settings.hasThirdPlace)
+        }
+      }
+      saveTournament(t); showToast('淘汰赛已生成'); _ps.curTab = 'knockout'; render()
+    }
+    var teams = _getKoTeams()
+    if (teams.length < 2) { showToast('出线队伍不足'); return }
+    var mc = Math.floor(teams.length / 2)
+    var labels = []; for (var li = 0; li < mc; li++) labels.push('第' + (li + 1) + '场')
+    showActionSheet([
+      { text: '🎲 自动对阵', action: function () { _doKo(null) } },
+      { text: '✏️ 自定义对阵', action: function () {
+        showCustomMatchModal({ title: '淘汰赛自定义对阵', teams: teams, matchCount: mc, labels: labels, onConfirm: _doKo })
+      }}
+    ])
   }
 
   /* 9-team: generate round of 6 */
   var gr6 = document.getElementById('btn-gen-r6')
   if (gr6) gr6.onclick = function () {
-    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
-    var gs = get9TeamGroupStandings(t)
-    var r6m = generate9TeamRound6Matches(gs, (t.settings && t.settings.round6Rule) || 'ranked')
-    t.matches = (t.matches || []).concat(r6m)
-    nt.stageStatus.group = 'completed'; nt.stageStatus.round6 = 'in_progress'
-    t.nineTeam = nt; saveTournament(t)
-    showToast('6强赛对阵已生成'); _ps.curStage = 'round6'; render()
+    function _doR6(customPairs) {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      var r6m
+      if (customPairs) {
+        r6m = customPairs.map(function (pr, i) {
+          return { id: makeMatchId('r6'), stage: 'round6', matchLabel: '6强赛' + (i + 1),
+            team1: { id: pr[0].id, name: pr[0].name, score: pr[0].score },
+            team2: { id: pr[1].id, name: pr[1].name, score: pr[1].score },
+            score1: '', score2: '', winnerId: null, status: 'pending' }
+        })
+      } else {
+        var gs = get9TeamGroupStandings(t)
+        r6m = generate9TeamRound6Matches(gs, (t.settings && t.settings.round6Rule) || 'ranked')
+      }
+      t.matches = (t.matches || []).concat(r6m)
+      nt.stageStatus.group = 'completed'; nt.stageStatus.round6 = 'in_progress'
+      t.nineTeam = nt; saveTournament(t)
+      showToast('6强赛对阵已生成'); _ps.curStage = 'round6'; render()
+    }
+    showActionSheet([
+      { text: '🎲 随机对阵', action: function () { _doR6(null) } },
+      { text: '✏️ 自定义对阵', action: function () {
+        t = getTournament(p.id); var gs = get9TeamGroupStandings(t)
+        var pool = []; Object.keys(gs).sort().forEach(function (gn) { if (gs[gn].length >= 2) { pool.push(gs[gn][0]); pool.push(gs[gn][1]) } })
+        showCustomMatchModal({ title: '6强赛自定义对阵', teams: pool, matchCount: 3, labels: ['6强赛1', '6强赛2', '6强赛3'], onConfirm: _doR6 })
+      }}
+    ])
   }
 
   /* 9-team: generate ranking (7-9th) */
@@ -1428,46 +1522,97 @@ function mountSchedule(p) {
   /* 9-team: semi-final draw */
   var dsf = document.getElementById('btn-draw-semi')
   if (dsf) dsf.onclick = function () {
-    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
-    var rvm = get9TeamStageMatches(t, 'revival')
-    var revTeams = []
-    var rIds = new Set()
-    rvm.forEach(function (m) {
-      if (m.team1 && !rIds.has(m.team1.id)) { rIds.add(m.team1.id); revTeams.push(m.team1) }
-      if (m.team2 && !rIds.has(m.team2.id)) { rIds.add(m.team2.id); revTeams.push(m.team2) }
-    })
-    var revStandings = calculateStandings(rvm, revTeams)
-    if (revStandings.length === 0) { showToast('复活赛数据不足'); return }
-    var qualifier = revStandings[0]
-    nt.revivalQualifier = qualifier
-
-    var sfm = generate9TeamSemiFinalDraw(nt.round6Winners || [], qualifier)
-    t.matches = (t.matches || []).concat(sfm)
-    nt.stageStatus.revival = 'completed'; nt.stageStatus.semi = 'in_progress'
-    nt.semiFinalDrawn = true
-    t.nineTeam = nt; saveTournament(t)
-    showToast('4强赛抽签完成'); _ps.curStage = 'semi'; render()
+    function _getPool() {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      var rvm = get9TeamStageMatches(t, 'revival')
+      var revTeams = [], rIds = new Set()
+      rvm.forEach(function (m) {
+        if (m.team1 && !rIds.has(m.team1.id)) { rIds.add(m.team1.id); revTeams.push(m.team1) }
+        if (m.team2 && !rIds.has(m.team2.id)) { rIds.add(m.team2.id); revTeams.push(m.team2) }
+      })
+      var revStandings = calculateStandings(rvm, revTeams)
+      if (revStandings.length === 0) { showToast('复活赛数据不足'); return null }
+      var qualifier = revStandings[0]
+      nt.revivalQualifier = qualifier
+      t.nineTeam = nt
+      return { pool: (nt.round6Winners || []).concat([qualifier]), nt: nt }
+    }
+    function _doSemi(customPairs) {
+      t = getTournament(p.id); var info = _getPool(); if (!info) return
+      var nt = info.nt, sfm
+      if (customPairs) {
+        sfm = customPairs.map(function (pr, i) {
+          return { id: makeMatchId('sf'), stage: 'semi', matchLabel: '4强赛' + (i + 1),
+            team1: { id: pr[0].id, name: pr[0].name, score: pr[0].score },
+            team2: { id: pr[1].id, name: pr[1].name, score: pr[1].score },
+            score1: '', score2: '', winnerId: null, status: 'pending' }
+        })
+      } else {
+        sfm = generate9TeamSemiFinalDraw(nt.round6Winners || [], nt.revivalQualifier)
+      }
+      t.matches = (t.matches || []).concat(sfm)
+      nt.stageStatus.revival = 'completed'; nt.stageStatus.semi = 'in_progress'; nt.semiFinalDrawn = true
+      t.nineTeam = nt; saveTournament(t)
+      showToast('4强赛抽签完成'); _ps.curStage = 'semi'; render()
+    }
+    var info = _getPool(); if (!info) return
+    showActionSheet([
+      { text: '🎲 随机抽签', action: function () { _doSemi(null) } },
+      { text: '✏️ 自定义对阵', action: function () {
+        showCustomMatchModal({ title: '4强赛自定义对阵', teams: info.pool, matchCount: 2, labels: ['4强赛1', '4强赛2'], onConfirm: _doSemi })
+      }}
+    ])
   }
 
   /* 9-team: generate finals */
   var gfn = document.getElementById('btn-gen-finals')
   if (gfn) gfn.onclick = function () {
-    t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+    function _doFinals(customPairs) {
+      t = getTournament(p.id); var nt = t.nineTeam || init9TeamData()
+      var sm = get9TeamStageMatches(t, 'semi')
+      var sfW = [], sfL = []
+      sm.forEach(function (m) {
+        if (m.status === 'finished' && m.winnerId) {
+          var w = m.team1.id === m.winnerId ? m.team1 : m.team2
+          var l = m.team1.id === m.winnerId ? m.team2 : m.team1
+          sfW.push(w); sfL.push(l)
+        }
+      })
+      nt.semiFinalWinners = sfW; nt.semiFinalLosers = sfL
+      var fm
+      if (customPairs) {
+        fm = []
+        if (customPairs[0]) fm.push({ id: makeMatchId('fn'), stage: 'final', matchLabel: '决赛',
+          team1: { id: customPairs[0][0].id, name: customPairs[0][0].name, score: customPairs[0][0].score },
+          team2: { id: customPairs[0][1].id, name: customPairs[0][1].name, score: customPairs[0][1].score },
+          score1: '', score2: '', winnerId: null, status: 'pending' })
+        if (customPairs[1]) fm.push({ id: makeMatchId('tp'), stage: 'third', matchLabel: '三四名决赛',
+          team1: { id: customPairs[1][0].id, name: customPairs[1][0].name, score: customPairs[1][0].score },
+          team2: { id: customPairs[1][1].id, name: customPairs[1][1].name, score: customPairs[1][1].score },
+          score1: '', score2: '', winnerId: null, status: 'pending' })
+      } else {
+        fm = generate9TeamFinals(sfW, sfL)
+      }
+      t.matches = (t.matches || []).concat(fm)
+      nt.stageStatus.semi = 'completed'; nt.stageStatus.final = 'in_progress'
+      t.nineTeam = nt; saveTournament(t)
+      showToast('决赛已生成'); _ps.curStage = 'final'; render()
+    }
+    t = getTournament(p.id)
     var sm = get9TeamStageMatches(t, 'semi')
-    var sfWinners = [], sfLosers = []
+    var allTeams = []
     sm.forEach(function (m) {
       if (m.status === 'finished' && m.winnerId) {
-        var w = m.team1.id === m.winnerId ? m.team1 : m.team2
-        var l = m.team1.id === m.winnerId ? m.team2 : m.team1
-        sfWinners.push(w); sfLosers.push(l)
+        allTeams.push(m.team1.id === m.winnerId ? m.team1 : m.team2)
+        allTeams.push(m.team1.id === m.winnerId ? m.team2 : m.team1)
       }
     })
-    nt.semiFinalWinners = sfWinners; nt.semiFinalLosers = sfLosers
-    var fm = generate9TeamFinals(sfWinners, sfLosers)
-    t.matches = (t.matches || []).concat(fm)
-    nt.stageStatus.semi = 'completed'; nt.stageStatus.final = 'in_progress'
-    t.nineTeam = nt; saveTournament(t)
-    showToast('决赛已生成'); _ps.curStage = 'final'; render()
+    showActionSheet([
+      { text: '🎲 自动生成', action: function () { _doFinals(null) } },
+      { text: '✏️ 自定义对阵', action: function () {
+        showCustomMatchModal({ title: '决赛/三四名自定义', teams: allTeams, matchCount: 2, labels: ['决赛', '三四名决赛'], onConfirm: _doFinals })
+      }}
+    ])
   }
 }
 

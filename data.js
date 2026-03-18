@@ -105,21 +105,26 @@ function _syncFromCloud() {
       if (d && d.id) cloudMap[d.id] = d
     })
     var localList = getTournaments()
+    var deletedIds = JSON.parse(localStorage.getItem('tennis_deleted') || '[]')
     var pushCount = 0
     localList.forEach(function (lt) {
+      if (deletedIds.indexOf(lt.id) >= 0) return
       if (!cloudMap[lt.id]) {
-        if (!lt.creatorId) lt.creatorId = getMyUserId()
-        if (!lt.createTime) lt.createTime = Date.now()
-        lt.updateTime = Date.now()
-        cloudMap[lt.id] = lt
-        _pushToCloud(lt)
-        pushCount++
+        if (isCreator(lt)) {
+          if (!lt.creatorId) lt.creatorId = getMyUserId()
+          if (!lt.createTime) lt.createTime = Date.now()
+          lt.updateTime = Date.now()
+          cloudMap[lt.id] = lt
+          _pushToCloud(lt)
+          pushCount++
+        }
       } else if ((lt.updateTime || 0) > (cloudMap[lt.id].updateTime || 0)) {
         cloudMap[lt.id] = lt
         _pushToCloud(lt)
         pushCount++
       }
     })
+    deletedIds.forEach(function (did) { delete cloudMap[did] })
     var merged = Object.keys(cloudMap).map(function (k) { return cloudMap[k] })
     merged.sort(function (a, b) { return (b.createTime || 0) - (a.createTime || 0) })
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
@@ -202,6 +207,9 @@ function saveTournament(tournament) {
 function deleteTournament(id) {
   var list = getTournaments().filter(function (t) { return t.id !== id })
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  var del = JSON.parse(localStorage.getItem('tennis_deleted') || '[]')
+  if (del.indexOf(id) < 0) del.push(id)
+  localStorage.setItem('tennis_deleted', JSON.stringify(del))
   _deleteFromCloud(id)
 }
 
