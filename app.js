@@ -1924,15 +1924,15 @@ function mountSchedule(p) {
    PAGE: MATCH (Score Entry)
    ==================================================================== */
 function _initSetsFromScore(scoreStr) {
-  if (!scoreStr) return [{ a: '', b: '', tb1: '', tb2: '' }]
+  if (!scoreStr) return [{ a: '', b: '', tb1: '0', tb2: '0' }]
   var sets = []
   String(scoreStr).split(/[,，]/).forEach(function (s) {
     var m = s.trim().match(/(\d+)\s*[-:：]\s*(\d+)(?:\s*\((\d+)\s*[-:：]\s*(\d+)\))?/)
     if (m) {
-      sets.push({ a: m[1], b: m[2], tb1: m[3] || '', tb2: m[4] || '' })
+      sets.push({ a: m[1], b: m[2], tb1: m[3] || '0', tb2: m[4] || '0' })
     }
   })
-  return sets.length > 0 ? sets : [{ a: '', b: '', tb1: '', tb2: '' }]
+  return sets.length > 0 ? sets : [{ a: '', b: '', tb1: '0', tb2: '0' }]
 }
 
 function _buildScoreFromSets(sets) {
@@ -1941,23 +1941,17 @@ function _buildScoreFromSets(sets) {
     var s = sets[i]
     if (s.a === '' || s.b === '') continue
     var a = parseInt(s.a) || 0, b = parseInt(s.b) || 0
-    var tbStr = ''
-    if (s.tb1 !== '' && s.tb2 !== '') {
-      tbStr = '(' + (parseInt(s.tb1) || 0) + '-' + (parseInt(s.tb2) || 0) + ')'
-    }
+    var tb1v = parseInt(s.tb1) || 0, tb2v = parseInt(s.tb2) || 0
+    var hasTb = (tb1v > 0 || tb2v > 0)
+    var tbStr = hasTb ? '(' + tb1v + '-' + tb2v + ')' : ''
     valid.push({ a: a, b: b, tbStr: tbStr, tb1: s.tb1, tb2: s.tb2 })
     t1G += a; t2G += b
     if (a > b) t1S++; else if (b > a) t2S++
   }
   if (valid.length === 0) return null
-  var score1 = valid.map(function (v) { return v.a + '-' + v.b + (v.tbStr ? v.tbStr : '') }).join(', ')
-  var score2 = valid.map(function (v) { return v.b + '-' + v.a + (v.tbStr ? v.tbStr : '') }).join(', ')
+  var score1 = valid.map(function (v) { return v.a + '-' + v.b + v.tbStr }).join(', ')
+  var score2 = valid.map(function (v) { return v.b + '-' + v.a + v.tbStr }).join(', ')
   return { sets: valid, score1: score1, score2: score2, t1Games: t1G, t2Games: t2G, t1Sets: t1S, t2Sets: t2S, t1Net: t1G - t2G, t2Net: t2G - t1G, autoWinner: t1S > t2S ? 1 : (t2S > t1S ? 2 : 0) }
-}
-
-function _isTiebreak(a, b) {
-  var x = parseInt(a) || 0, y = parseInt(b) || 0
-  return (x === 7 && y === 6) || (x === 6 && y === 7) || (x === 4 && y === 3) || (x === 3 && y === 4)
 }
 
 function renderMatch(p) {
@@ -1970,14 +1964,13 @@ function renderMatch(p) {
   if (!m) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛场次不存在</div></div></div>'
 
   var _mk = p.matchId || ('ko_' + p.koRi + '_' + p.koMi)
-  var _draft = _matchDrafts[_mk]
   if (_ps.matchKey !== _mk) { _ps.sets = null; _ps.winnerId = undefined }
   _ps.matchKey = _mk
   if (!_ps.sets) {
-    var existingScore = (_draft && _draft.scoreInput) ? _draft.scoreInput : (m.score1 || '')
-    _ps.sets = _initSetsFromScore(existingScore)
+    var src = m.score1 || ''
+    _ps.sets = _initSetsFromScore(src)
   }
-  _ps.winnerId = (_draft && _draft.winnerId !== undefined) ? _draft.winnerId : (_ps.winnerId !== undefined ? _ps.winnerId : (m.winnerId || null))
+  if (_ps.winnerId === undefined) _ps.winnerId = m.winnerId || null
 
   var parsed = _buildScoreFromSets(_ps.sets)
   if (parsed && !_ps.winnerId) {
@@ -2006,7 +1999,6 @@ function renderMatch(p) {
   html += '<div class="set-header-row"><div class="set-hdr-label"></div><div class="set-hdr-name">' + n1 + '</div><div class="set-hdr-sep"></div><div class="set-hdr-name">' + n2 + '</div><div class="set-hdr-del"></div></div>'
 
   _ps.sets.forEach(function (s, i) {
-    var hasTb = _isTiebreak(s.a, s.b)
     html += '<div class="set-input-row" data-si="' + i + '">'
     html += '<div class="set-label">第' + (i + 1) + '盘</div>'
     html += '<input class="set-num" id="sa-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.a) + '" placeholder="0">'
@@ -2015,14 +2007,12 @@ function renderMatch(p) {
     if (_ps.sets.length > 1) html += '<div class="set-del" data-del="' + i + '">✕</div>'
     else html += '<div class="set-del-ph"></div>'
     html += '</div>'
-    if (hasTb) {
-      html += '<div class="tb-row" data-si="' + i + '">'
-      html += '<div class="tb-label">🎯 抢七</div>'
-      html += '<input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb1) + '" placeholder="0">'
-      html += '<div class="tb-sep">:</div>'
-      html += '<input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb2) + '" placeholder="0">'
-      html += '</div>'
-    }
+    html += '<div class="tb-row" data-si="' + i + '">'
+    html += '<div class="tb-label">抢七</div>'
+    html += '<input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb1 || '0') + '" placeholder="0">'
+    html += '<div class="tb-sep">:</div>'
+    html += '<input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb2 || '0') + '" placeholder="0">'
+    html += '</div>'
   })
 
   html += '<div class="set-add-row"><button class="btn-secondary btn-mini" id="btn-add-set">＋ 添加一盘</button></div>'
@@ -2063,7 +2053,8 @@ function _saveSetsToState(mk) {
   var scoreStr = _ps.sets.map(function (s) {
     if (s.a === '' && s.b === '') return ''
     var base = (s.a || '0') + '-' + (s.b || '0')
-    if (s.tb1 !== '' && s.tb2 !== '') base += '(' + (s.tb1 || '0') + '-' + (s.tb2 || '0') + ')'
+    var tb1v = parseInt(s.tb1) || 0, tb2v = parseInt(s.tb2) || 0
+    if (tb1v > 0 || tb2v > 0) base += '(' + tb1v + '-' + tb2v + ')'
     return base
   }).filter(Boolean).join(', ')
   if (mk) { if (!_matchDrafts[mk]) _matchDrafts[mk] = {}; _matchDrafts[mk].scoreInput = scoreStr }
@@ -2079,9 +2070,11 @@ function _readSetsFromDOM() {
     var b = sb.value.replace(/[^0-9]/g, '')
     var t1 = document.getElementById('tb1-' + i)
     var t2 = document.getElementById('tb2-' + i)
-    sets.push({ a: a, b: b, tb1: t1 ? t1.value.replace(/[^0-9]/g, '') : '', tb2: t2 ? t2.value.replace(/[^0-9]/g, '') : '' })
+    var tb1v = t1 ? t1.value.replace(/[^0-9]/g, '') : '0'
+    var tb2v = t2 ? t2.value.replace(/[^0-9]/g, '') : '0'
+    sets.push({ a: a, b: b, tb1: tb1v || '0', tb2: tb2v || '0' })
   }
-  return sets.length > 0 ? sets : [{ a: '', b: '', tb1: '', tb2: '' }]
+  return sets.length > 0 ? sets : [{ a: '', b: '', tb1: '0', tb2: '0' }]
 }
 
 function _updatePreview(sets, m) {
@@ -2112,7 +2105,6 @@ function _updatePreview(sets, m) {
       else if (parsed.autoWinner === 2 && m.team2) wid = m.team2.id
       if (wid && _ps.winnerId !== wid) {
         _ps.winnerId = wid
-        if (_ps.matchKey) { if (!_matchDrafts[_ps.matchKey]) _matchDrafts[_ps.matchKey] = {}; _matchDrafts[_ps.matchKey].winnerId = wid }
         _updateWinnerUI(wid)
       }
     }
@@ -2148,11 +2140,9 @@ function mountMatch(p) {
   function _filterDigit(inp) {
     var v = inp.value.replace(/[^0-9]/g, '')
     if (v !== inp.value) inp.value = v
-    return v
   }
 
   var _rafId = 0
-  var _draftTimer = 0
 
   function _syncSets() {
     if (!_ps.sets) return
@@ -2166,61 +2156,27 @@ function mountMatch(p) {
     })
   }
 
-  function _deferDraft() {
-    clearTimeout(_draftTimer)
-    _draftTimer = setTimeout(function () { _saveSetsToState(_mk) }, 300)
-  }
-
-  function _ensureTbRow(i) {
-    if (!_ps.sets || !_ps.sets[i]) return
-    var setRow = document.querySelector('.set-input-row[data-si="' + i + '"]')
-    if (!setRow) return
-    var existing = document.querySelector('.tb-row[data-si="' + i + '"]')
-    var hasTb = _isTiebreak(_ps.sets[i].a, _ps.sets[i].b)
-    if (hasTb && !existing) {
-      var div = document.createElement('div')
-      div.className = 'tb-row'
-      div.setAttribute('data-si', i)
-      div.innerHTML = '<div class="tb-label">🎯 抢七</div><input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(_ps.sets[i].tb1) + '" placeholder="0"><div class="tb-sep">:</div><input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(_ps.sets[i].tb2) + '" placeholder="0">'
-      setRow.parentNode.insertBefore(div, setRow.nextSibling)
-      _bindTb(i)
-    } else if (!hasTb && existing) {
-      _ps.sets[i].tb1 = ''; _ps.sets[i].tb2 = ''
-      existing.parentNode.removeChild(existing)
-    }
-  }
-
-  function _bindTb(i) {
-    var tb1 = document.getElementById('tb1-' + i)
-    var tb2 = document.getElementById('tb2-' + i)
-    if (tb1) { tb1.oninput = function () { _filterDigit(this); _scheduleUpdate(-1) } }
-    if (tb2) { tb2.oninput = function () { _filterDigit(this); _scheduleUpdate(-1) } }
-  }
-
-  function _scheduleUpdate(idx) {
+  function _scheduleUpdate() {
     _syncSets()
-    if (idx >= 0) _ensureTbRow(idx)
     if (_rafId) cancelAnimationFrame(_rafId)
     _rafId = requestAnimationFrame(function () {
       _rafId = 0
       _updatePreview(_ps.sets, m)
-      _deferDraft()
     })
   }
 
   _ps.sets.forEach(function (s, i) {
-    var sa = document.getElementById('sa-' + i)
-    var sb = document.getElementById('sb-' + i)
-    if (sa) { sa.oninput = function () { _filterDigit(this); _scheduleUpdate(i) } }
-    if (sb) { sb.oninput = function () { _filterDigit(this); _scheduleUpdate(i) } }
-    _bindTb(i)
+    ;['sa-', 'sb-', 'tb1-', 'tb2-'].forEach(function (prefix) {
+      var el = document.getElementById(prefix + i)
+      if (el) el.oninput = function () { _filterDigit(this); _scheduleUpdate() }
+    })
   })
 
   document.getElementById('btn-add-set').onclick = function () {
     _syncSets()
-    _ps.sets.push({ a: '', b: '', tb1: '', tb2: '' })
+    _ps.sets.push({ a: '', b: '', tb1: '0', tb2: '0' })
     _ps._focusId = 'sa-' + (_ps.sets.length - 1)
-    _saveSetsToState(_mk); render()
+    render()
   }
 
   document.querySelectorAll('[data-del]').forEach(function (el) {
@@ -2228,18 +2184,14 @@ function mountMatch(p) {
       _syncSets()
       var idx = +el.dataset.del
       _ps.sets.splice(idx, 1)
-      if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb1: '', tb2: '' }]
-      _saveSetsToState(_mk); render()
+      if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb1: '0', tb2: '0' }]
+      render()
     }
   })
 
   if (_ps._focusId) {
     var fe = document.getElementById(_ps._focusId)
-    if (fe) {
-      fe.focus()
-      var vl = fe.value.length
-      fe.setSelectionRange(vl, vl)
-    }
+    if (fe) { fe.focus(); fe.setSelectionRange(fe.value.length, fe.value.length) }
     _ps._focusId = null
   }
 
@@ -2247,40 +2199,42 @@ function mountMatch(p) {
     el.onclick = function () {
       _syncSets()
       _ps.winnerId = el.dataset.wid
-      if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = el.dataset.wid }
       _updateWinnerUI(el.dataset.wid)
     }
   })
 
   document.getElementById('btn-save').onclick = function () {
-    clearTimeout(_draftTimer)
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = 0 }
     _ps.sets = _readSetsFromDOM()
-    _saveSetsToState(_mk)
     var parsed = _buildScoreFromSets(_ps.sets)
     if (!parsed) { showToast('请输入至少一盘比分'); return }
     if (!_ps.winnerId) { showToast('请选择胜方'); return }
-    t = getTournament(p.id)
+
+    var freshT = getTournament(p.id)
+    if (!freshT) { showToast('赛事未找到'); return }
     var isKo = p.koRi !== undefined
-    var m = null
+    var fm = null
 
-    if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
-    else if (isKo) { var ri = +p.koRi, mi = +p.koMi; if (t.knockout && t.knockout[ri]) m = t.knockout[ri].matches[mi] }
-    if (!m) { showToast('比赛未找到'); return }
+    if (p.matchId) { fm = (freshT.matches || []).find(function (x) { return x.id === p.matchId }) }
+    else if (isKo) { var ri = +p.koRi, mi = +p.koMi; if (freshT.knockout && freshT.knockout[ri]) fm = freshT.knockout[ri].matches[mi] }
+    if (!fm) { showToast('比赛未找到'); return }
 
-    m.score1 = parsed.score1; m.score2 = parsed.score2; m.winnerId = _ps.winnerId; m.status = 'finished'
+    fm.score1 = parsed.score1; fm.score2 = parsed.score2; fm.winnerId = _ps.winnerId; fm.status = 'finished'
 
     if (isKo) {
       var ri = +p.koRi, mi = +p.koMi
-      var winner = m.team1.id === m.winnerId ? m.team1 : m.team2
-      var loser = m.team1.id === m.winnerId ? m.team2 : m.team1
-      t.knockout = advanceKnockoutWinner(t.knockout, ri, mi, winner, loser)
+      var winner = fm.team1.id === fm.winnerId ? fm.team1 : fm.team2
+      var loser = fm.team1.id === fm.winnerId ? fm.team2 : fm.team1
+      freshT.knockout = advanceKnockoutWinner(freshT.knockout, ri, mi, winner, loser)
     }
 
-    if (t.format === 'nine-team') update9TeamProgress(t)
+    if (freshT.format === 'nine-team') update9TeamProgress(freshT)
 
-    saveTournament(t)
-    if (_ps.matchKey) delete _matchDrafts[_ps.matchKey]
+    saveTournament(freshT)
+    _ps.sets = null
+    _ps.winnerId = undefined
+    _ps.matchKey = null
+    delete _matchDrafts[_mk]
     showToast('比分已保存 ✓')
     navigate('/schedule?id=' + p.id)
   }
