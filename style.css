@@ -60,6 +60,8 @@ button,.btn{cursor:pointer;font-family:inherit;outline:none;transition:var(--tr)
 .btn-undo{background:rgba(255,82,82,.12);color:var(--danger);border:1px solid rgba(255,82,82,.25);border-radius:var(--pill);padding:5px 14px;font-size:12px;font-weight:600}
 .btn-undo:active{background:rgba(255,82,82,.25);transform:scale(.96)}
 .text-right{text-align:right}
+.btn-home-link{background:none;color:var(--primary-light);font-size:14px;font-weight:600;padding:6px 0;letter-spacing:.5px;opacity:.85}
+.btn-home-link:active{opacity:1;transform:scale(.96)}
 .btn-block{display:block;width:100%}
 .btn-disabled{opacity:.35;pointer-events:none}
 .btn-icon{background:none;border:none;font-size:20px;padding:6px;opacity:.5;border-radius:50%}

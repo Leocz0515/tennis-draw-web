@@ -364,7 +364,7 @@ function renderCreate() {
   _ps.format = _ps.format || 'round-robin'
   _ps.name = _ps.name || ''
   var html = '<div class="container">'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">🏆 新建比赛</div><div style="width:40px"></div></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">🏆 新建比赛</div><div style="width:40px"></div></div>'
   html += '<div class="card"><div class="section-title mb-sm">比赛名称</div>'
   html += '<input class="input-field" id="inp-name" placeholder="如：2025春季网球赛" value="' + esc(_ps.name) + '" maxlength="30"></div>'
   html += '<div class="card"><div class="section-title mb-sm">比赛类型</div><div class="flex-row gap-md">'
@@ -382,7 +382,7 @@ function renderCreate() {
 }
 
 function mountCreate() {
-  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   document.getElementById('inp-name').oninput = function () { _ps.name = this.value }
   document.querySelectorAll('[data-type]').forEach(function (el) {
     el.onclick = function () { _ps.type = el.dataset.type; render() }
@@ -410,11 +410,11 @@ function mountCreate() {
 function renderPlayers(p) {
   var t = getTournament(p.id)
   if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
-  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以管理球员</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以管理球员</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var players = (t.players || []).slice().sort(function (a, b) { return b.score - a.score })
   var total = players.length, avg = total ? Math.round(players.reduce(function (s, p) { return s + p.score }, 0) / total) : 0
   var html = '<div class="container">'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">👤 选手管理</div><button class="btn-icon" id="btn-home" title="首页">🏠</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">👤 选手管理</div><div style="width:40px"></div></div>'
   html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">共 ' + total + ' 人 · 平均积分 ' + avg + '</div></div><div class="score-badge">' + esc(TYPE[t.type]) + '</div></div></div>'
   if (t.format === 'nine-team') {
     if (t.type === 'doubles') {
@@ -453,9 +453,7 @@ function renderPlayers(p) {
 }
 
 function mountPlayers(p) {
-  document.getElementById('btn-back').onclick = function () { goBack() }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   var t = getTournament(p.id)
   if (!t) return
 
@@ -547,13 +545,13 @@ function mountPlayers(p) {
 function renderPairing(p) {
   var t = getTournament(p.id)
   if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
-  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var teams = t.teams || [], pairedIds = new Set()
   teams.forEach(function (tm) { pairedIds.add(tm.player1.id); pairedIds.add(tm.player2.id) })
   var unpaired = t.players.filter(function (x) { return !pairedIds.has(x.id) }).sort(function (a, b) { return b.score - a.score })
   var selected = _ps.selectedId || null
   var html = '<div class="container">'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">👥 双打组队</div><div style="width:40px"></div></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">👥 双打组队</div><div style="width:40px"></div></div>'
   html += '<div class="action-bar">'
   html += '<button class="btn-secondary btn-mini" id="btn-rand-pair">🎲 随机组队</button>'
   html += '<button class="btn-secondary btn-mini" id="btn-smart-pair">🧠 智能组队</button>'
@@ -586,7 +584,7 @@ function renderPairing(p) {
 
 function mountPairing(p) {
   var t = getTournament(p.id); if (!t) return
-  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
 
   document.querySelectorAll('[data-pair]').forEach(function (el) {
     el.onclick = function () {
@@ -651,7 +649,7 @@ function mountPairing(p) {
 function renderSettings(p) {
   var t = getTournament(p.id)
   if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
-  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以修改设置</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以修改设置</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var items = t.type === 'doubles' ? (t.teams || []) : (t.players || [])
   var itemCount = items.length, isD = t.type === 'doubles', fmt = t.format
   var s = t.settings || {}
@@ -665,7 +663,7 @@ function renderSettings(p) {
   _ps.settings = s
 
   var html = '<div class="container">'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">⚙️ 抽签设置</div><button class="btn-icon" id="btn-home" title="首页">🏠</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">⚙️ 抽签设置</div><div style="width:40px"></div></div>'
   html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + itemCount + (isD ? ' 队' : ' 人') + ' · ' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div></div>'
 
   if (fmt === 'round-robin') {
@@ -786,9 +784,7 @@ function renderSettings(p) {
 function mountSettings(p) {
   var t = getTournament(p.id); if (!t) return
   var s = _ps.settings || t.settings || {}
-  document.getElementById('btn-back').onclick = function () { goBack() }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
 
   var gc = document.getElementById('inp-gc')
   if (gc) gc.oninput = function () { s.groupCount = Math.max(2, parseInt(gc.value) || 2); t.settings = s; saveTournament(t); render() }
@@ -895,7 +891,7 @@ function renderResult(p) {
   var expanded = _ps.expanded || {}
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📋 分组结果</div><button class="btn-icon" id="btn-home" title="首页">🏠</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">📋 分组结果</div><div style="width:40px"></div></div>'
   html += '<div class="card header-card"><div class="flex-between"><div class="header-name">' + esc(t.name) + '</div>'
   if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name" title="修改名称" style="font-size:16px;opacity:.6">✏️</button>'
   html += '</div>'
@@ -930,7 +926,7 @@ function renderResult(p) {
     }
     html += '<button class="btn-accent" id="btn-share">📤 分享</button></div>'
     html += '<div class="action-row"><button class="btn-secondary" id="btn-export">💾 导出</button>'
-    if (_canEdit(t)) html += '<button class="btn-secondary" id="btn-redraw">🔄 重新抽签</button>'
+    if (_canEdit(t)) html += '<button class="btn-undo" id="btn-undo-draw">↩️ 撤回分组</button>'
     html += '</div></div>'
   }
   html += '</div>'
@@ -941,9 +937,7 @@ function mountResult(p) {
   var t = _t(p.id); if (!t || !t.groups) return
   if (typeof listenToTournament === 'function') listenToTournament(p.id)
   _ps.expanded = _ps.expanded || {}
-  document.getElementById('btn-back').onclick = function () { _viewer ? null : goBack() }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
 
   document.querySelectorAll('.group-header').forEach(function (el) {
     el.onclick = function () {
@@ -986,11 +980,16 @@ function mountResult(p) {
   if (sh) sh.onclick = function () { doShare(p.id) }
   var ex = document.getElementById('btn-export')
   if (ex) ex.onclick = function () { doExport(t) }
-  var rd = document.getElementById('btn-redraw')
-  if (rd) rd.onclick = function () {
+  var ud = document.getElementById('btn-undo-draw')
+  if (ud) ud.onclick = function () {
     showModal({
-      title: '重新抽签', content: '重新抽签将清空已录入的比分和赛程，是否继续？',
-      onConfirm: function () { navigate('/settings?id=' + t.id) }
+      title: '撤回分组', content: '将清空分组、赛程和比分数据，回到抽签设置页面，确定撤回？', confirmText: '确认撤回',
+      onConfirm: function () {
+        t = getTournament(p.id)
+        t.groups = null; t.matches = []; t.knockout = null; t.nineTeam = null
+        saveTournament(t); showToast('已撤回分组')
+        navigate('/settings?id=' + t.id)
+      }
     })
   }
 }
@@ -1143,10 +1142,11 @@ function renderSchedule(p) {
   var fmt = t.format, matches = t.matches || []
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📅 赛程</div><div><button class="btn-icon" id="btn-rankings" style="margin-right:4px">🏆</button><button class="btn-icon" id="btn-home" title="首页">🏠</button></div></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">📅 赛程</div><button class="btn-icon" id="btn-rankings">🏆</button></div>'
   html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div>'
   if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">✏️</button>'
   html += '</div></div>'
+  if (_canScore(t)) html += '<div class="text-right mb-sm"><button class="btn-undo" id="btn-undo-schedule">↩️ 撤回赛程</button></div>'
 
   if (fmt === 'nine-team') {
     html += render9TeamSchedule(t)
@@ -1358,10 +1358,21 @@ function renderKnockoutBracket(t) {
 function mountSchedule(p) {
   var t = _t(p.id); if (!t) return
   if (typeof listenToTournament === 'function') listenToTournament(p.id)
-  document.getElementById('btn-back').onclick = function () { goBack() }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   document.getElementById('btn-rankings').onclick = function () { navigate('/rankings?id=' + p.id) }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+
+  var usc = document.getElementById('btn-undo-schedule')
+  if (usc) usc.onclick = function () {
+    showModal({ title: '撤回赛程', content: '将清空所有比赛对阵和比分数据，回到分组结果页面，确定撤回？', confirmText: '确认撤回',
+      onConfirm: function () {
+        t = getTournament(p.id)
+        t.matches = []; t.knockout = null; t.nineTeam = null
+        saveTournament(t); showToast('已撤回赛程')
+        navigate('/result?id=' + t.id)
+      }
+    })
+  }
+
   var _enSch = document.getElementById('btn-edit-name-sch')
   if (_enSch) _enSch.onclick = function () {
     showPrompt({
@@ -1703,7 +1714,7 @@ function mountSchedule(p) {
 function renderMatch(p) {
   var t = _t(p.id)
   if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
-  if (!_canScore(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="goBack()">← 返回</button></div></div>'
+  if (!_canScore(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var m = null, isKo = false, koRi = -1, koMi = -1
   if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
   else if (p.koRi !== undefined) { koRi = +p.koRi; koMi = +p.koMi; isKo = true; if (t.knockout && t.knockout[koRi]) m = t.knockout[koRi].matches[koMi] }
@@ -1717,7 +1728,7 @@ function renderMatch(p) {
   _ps.winnerId = (_draft && _draft.winnerId !== undefined) ? _draft.winnerId : (_ps.winnerId !== undefined ? _ps.winnerId : (m.winnerId || null))
 
   var html = '<div class="container">'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">📝 比分录入</div><button class="btn-icon" id="btn-home" title="首页">🏠</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">📝 比分录入</div><div style="width:40px"></div></div>'
 
   var stageLabel = m.matchLabel || m.stage || '比赛'
   if (m.groupName) stageLabel = m.groupName + '组 第' + m.round + '轮'
@@ -1755,9 +1766,7 @@ function renderMatch(p) {
 
 function mountMatch(p) {
   var t = _t(p.id); if (!t) return
-  document.getElementById('btn-back').onclick = function () { goBack() }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   var _mk = _ps.matchKey
   document.getElementById('inp-s1').oninput = function () { _ps.score1 = this.value; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].score1 = this.value } }
   document.getElementById('inp-s2').oninput = function () { _ps.score2 = this.value; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].score2 = this.value } }
@@ -1790,7 +1799,7 @@ function mountMatch(p) {
     saveTournament(t)
     if (_ps.matchKey) delete _matchDrafts[_ps.matchKey]
     showToast('比分已保存 ✓')
-    goBack()
+    navigate('/schedule?id=' + p.id)
   }
 }
 
@@ -1815,7 +1824,7 @@ function renderRankings(p) {
   var fmt = t.format
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
-  html += '<div class="flex-between mb-md"><button class="btn-icon" id="btn-back">← 返回</button><div class="section-title">🏆 排名</div><button class="btn-icon" id="btn-home" title="首页">🏠</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">🏆 排名</div><div style="width:40px"></div></div>'
 
   if (fmt === 'nine-team') {
     html += render9TeamRankings(t)
@@ -1932,9 +1941,7 @@ function renderStandingsTable(standings, qualifyCount) {
 
 function mountRankings(p) {
   if (typeof listenToTournament === 'function') listenToTournament(p.id)
-  document.getElementById('btn-back').onclick = function () { goBack() }
-  var _bh = document.getElementById('btn-home')
-  if (_bh) _bh.onclick = function () { location.hash = '/' }
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   document.querySelectorAll('[data-rtab]').forEach(function (el) {
     el.onclick = function () { _ps.rankTab = el.dataset.rtab; render() }
   })
