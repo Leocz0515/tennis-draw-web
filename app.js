@@ -2147,34 +2147,43 @@ function mountMatch(p) {
     _saveSetsToState(_mk)
   }
 
-  function _onInput(focusId) {
-    _syncSets()
-    var needsRender = false
-    _ps.sets.forEach(function (s) {
-      var hasTb = _isTiebreak(s.a, s.b)
-      var hadTb = (s._hadTb === true)
-      if (hasTb !== hadTb) needsRender = true
-      s._hadTb = hasTb
-      if (!hasTb) { s.tb1 = ''; s.tb2 = '' }
-    })
-    if (needsRender) {
-      _ps._focusId = focusId
-      render()
-    } else {
-      _updatePreview(_ps.sets, m)
+  function _ensureTbRow(i) {
+    var setRow = document.querySelector('.set-input-row[data-si="' + i + '"]')
+    if (!setRow) return
+    var existing = document.querySelector('.tb-row[data-si="' + i + '"]')
+    var hasTb = _isTiebreak(_ps.sets[i].a, _ps.sets[i].b)
+    if (hasTb && !existing) {
+      var div = document.createElement('div')
+      div.className = 'tb-row'
+      div.setAttribute('data-si', i)
+      div.innerHTML = '<div class="tb-label">🎯 抢七</div><input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(_ps.sets[i].tb1) + '" placeholder="0"><div class="tb-sep">:</div><input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(_ps.sets[i].tb2) + '" placeholder="0">'
+      setRow.parentNode.insertBefore(div, setRow.nextSibling)
+      _bindTb(i)
+    } else if (!hasTb && existing) {
+      _ps.sets[i].tb1 = ''; _ps.sets[i].tb2 = ''
+      existing.parentNode.removeChild(existing)
     }
   }
 
-  _ps.sets.forEach(function (s, i) {
-    s._hadTb = _isTiebreak(s.a, s.b)
-    var sa = document.getElementById('sa-' + i)
-    var sb = document.getElementById('sb-' + i)
-    if (sa) { sa.oninput = function () { _filterDigit(this); _onInput('sa-' + i) } }
-    if (sb) { sb.oninput = function () { _filterDigit(this); _onInput('sb-' + i) } }
+  function _bindTb(i) {
     var tb1 = document.getElementById('tb1-' + i)
     var tb2 = document.getElementById('tb2-' + i)
     if (tb1) { tb1.oninput = function () { _filterDigit(this); _syncSets(); _updatePreview(_ps.sets, m) } }
     if (tb2) { tb2.oninput = function () { _filterDigit(this); _syncSets(); _updatePreview(_ps.sets, m) } }
+  }
+
+  function _onInput(idx) {
+    _syncSets()
+    _ensureTbRow(idx)
+    _updatePreview(_ps.sets, m)
+  }
+
+  _ps.sets.forEach(function (s, i) {
+    var sa = document.getElementById('sa-' + i)
+    var sb = document.getElementById('sb-' + i)
+    if (sa) { sa.oninput = function () { _filterDigit(this); _onInput(i) } }
+    if (sb) { sb.oninput = function () { _filterDigit(this); _onInput(i) } }
+    _bindTb(i)
   })
 
   document.getElementById('btn-add-set').onclick = function () {
