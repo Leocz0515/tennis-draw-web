@@ -283,6 +283,16 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .score-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .score-label{font-size:13px;width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .score-row .input-field{flex:1}
+.score-preview{margin-top:14px;background:var(--card);border:1px solid var(--glass-border);border-radius:12px;padding:12px;overflow-x:auto}
+.score-preview-row{display:flex;align-items:center;gap:6px;padding:6px 0;font-size:13px}
+.score-preview-row:first-child{border-bottom:1px solid var(--glass-border)}
+.sp-name{width:80px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.sp-set{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;background:rgba(255,255,255,.05);color:var(--text3);flex-shrink:0}
+.sp-set.sp-win{background:var(--primary);color:#fff}
+.sp-total{font-size:11px;color:var(--text3);margin-left:auto;flex-shrink:0}
+.sp-net{font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.06);flex-shrink:0}
+.sp-net.sp-pos{color:#4CAF50;background:rgba(76,175,80,.12)}
+.sp-net.sp-neg{color:#FF5252;background:rgba(255,82,82,.12)}
 .winner-options{display:flex;gap:10px}
 .winner-option{flex:1;padding:14px;border-radius:var(--r);background:var(--card);backdrop-filter:blur(8px);border:2px solid transparent;text-align:center;transition:var(--tr);position:relative;cursor:pointer}
 .winner-option.selected{border-color:var(--mint);background:rgba(86,212,160,.08)}

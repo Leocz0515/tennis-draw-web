@@ -110,6 +110,15 @@ function showCustomMatchModal(opts) {
   document.getElementById('modal-mask').onclick = function (e) { if (e.target.id === 'modal-mask') root.innerHTML = '' }
 }
 
+var _cloudSyncing = true
+
+function _notFoundHtml() {
+  if (_cloudSyncing) {
+    return '<div class="container"><div class="empty-state"><div class="empty-icon">☁️</div><div class="empty-text">正在从云端同步数据...</div><div class="empty-hint">请稍候，数据加载中</div></div></div>'
+  }
+  return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div><div class="text-center mt-md"><button class="btn-secondary" id="btn-retry-sync" style="margin-right:8px">🔄 重新同步</button><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
+}
+
 /* ===== Router ===== */
 var _routes = []
 function navigate(path) { _routes.push(location.hash); location.hash = path }
@@ -155,6 +164,12 @@ function render() {
     else if (page === 'schedule') mountSchedule(r.params)
     else if (page === 'match') mountMatch(r.params)
     else if (page === 'rankings') mountRankings(r.params)
+    var _rtr = document.getElementById('btn-retry-sync')
+    if (_rtr) _rtr.onclick = function () {
+      _rtr.textContent = '⏳ 同步中...'
+      _rtr.disabled = true
+      refreshFromCloud().then(function () { render() }).catch(function () { render() })
+    }
   })
 }
 
@@ -415,7 +430,7 @@ function mountCreate() {
    ==================================================================== */
 function renderPlayers(p) {
   var t = getTournament(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以管理球员</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var players = (t.players || []).slice().sort(function (a, b) { return b.score - a.score })
   var total = players.length, avg = total ? Math.round(players.reduce(function (s, p) { return s + p.score }, 0) / total) : 0
@@ -550,7 +565,7 @@ function mountPlayers(p) {
    ==================================================================== */
 function renderPairing(p) {
   var t = getTournament(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var teams = t.teams || [], pairedIds = new Set()
   teams.forEach(function (tm) { pairedIds.add(tm.player1.id); pairedIds.add(tm.player2.id) })
@@ -654,7 +669,7 @@ function mountPairing(p) {
    ==================================================================== */
 function renderSettings(p) {
   var t = getTournament(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以修改设置</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var items = t.type === 'doubles' ? (t.teams || []) : (t.players || [])
   var itemCount = items.length, isD = t.type === 'doubles', fmt = t.format
@@ -903,7 +918,7 @@ function mountSettings(p) {
    ==================================================================== */
 function renderResult(p) {
   var t = _t(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   if (!t.groups) return '<div class="container"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">尚未完成抽签</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var isD = t.type === 'doubles', fmt = t.format
   var expanded = _ps.expanded || {}
@@ -1227,7 +1242,7 @@ function copyTextResult(t) {
    ==================================================================== */
 function renderSchedule(p) {
   var t = _t(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   var fmt = t.format, matches = t.matches || []
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
@@ -1820,9 +1835,27 @@ function mountSchedule(p) {
 /* ====================================================================
    PAGE: MATCH (Score Entry)
    ==================================================================== */
+function _parseScoreInput(val) {
+  if (!val) return null
+  var sets = String(val).split(/[,，]/).map(function (s) { return s.trim() }).filter(Boolean)
+  var parsed = [], t1Games = 0, t2Games = 0, t1Sets = 0, t2Sets = 0
+  for (var i = 0; i < sets.length; i++) {
+    var m = sets[i].match(/(\d+)\s*[-:：]\s*(\d+)/)
+    if (!m) return null
+    var a = parseInt(m[1]), b = parseInt(m[2])
+    parsed.push({ a: a, b: b })
+    t1Games += a; t2Games += b
+    if (a > b) t1Sets++; else if (b > a) t2Sets++
+  }
+  if (parsed.length === 0) return null
+  var score1 = parsed.map(function (s) { return s.a + '-' + s.b }).join(', ')
+  var score2 = parsed.map(function (s) { return s.b + '-' + s.a }).join(', ')
+  return { sets: parsed, score1: score1, score2: score2, t1Games: t1Games, t2Games: t2Games, t1Sets: t1Sets, t2Sets: t2Sets, t1Net: t1Games - t2Games, t2Net: t2Games - t1Games, autoWinner: t1Sets > t2Sets ? 1 : (t2Sets > t1Sets ? 2 : 0) }
+}
+
 function renderMatch(p) {
   var t = _t(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   if (!_canScore(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var m = null, isKo = false, koRi = -1, koMi = -1
   if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
@@ -1832,9 +1865,18 @@ function renderMatch(p) {
   var _mk = p.matchId || ('ko_' + p.koRi + '_' + p.koMi)
   var _draft = _matchDrafts[_mk]
   _ps.matchKey = _mk
-  _ps.score1 = (_draft && _draft.score1 !== undefined) ? _draft.score1 : (_ps.score1 !== undefined ? _ps.score1 : (m.score1 || ''))
-  _ps.score2 = (_draft && _draft.score2 !== undefined) ? _draft.score2 : (_ps.score2 !== undefined ? _ps.score2 : (m.score2 || ''))
+  var existingScore = m.score1 || ''
+  _ps.scoreInput = (_draft && _draft.scoreInput !== undefined) ? _draft.scoreInput : (_ps.scoreInput !== undefined ? _ps.scoreInput : existingScore)
   _ps.winnerId = (_draft && _draft.winnerId !== undefined) ? _draft.winnerId : (_ps.winnerId !== undefined ? _ps.winnerId : (m.winnerId || null))
+
+  var parsed = _parseScoreInput(_ps.scoreInput)
+  if (parsed && !_ps.winnerId) {
+    if (parsed.autoWinner === 1 && m.team1) _ps.winnerId = m.team1.id
+    else if (parsed.autoWinner === 2 && m.team2) _ps.winnerId = m.team2.id
+  }
+
+  var n1 = m.team1 ? esc(m.team1.name) : 'TBD'
+  var n2 = m.team2 ? esc(m.team2.name) : 'TBD'
 
   var html = '<div class="container">'
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">📝 比分录入</div><div style="width:40px"></div></div>'
@@ -1843,26 +1885,37 @@ function renderMatch(p) {
   if (m.groupName) stageLabel = m.groupName + '组 第' + m.round + '轮'
   html += '<div class="card"><div class="match-info"><div class="match-stage">' + esc(stageLabel) + '</div></div>'
   html += '<div class="teams-display">'
-  html += '<div class="team-side"><div class="team-main-name">' + (m.team1 ? esc(m.team1.name) : 'TBD') + '</div></div>'
+  html += '<div class="team-side"><div class="team-main-name">' + n1 + '</div></div>'
   html += '<div class="vs-text">VS</div>'
-  html += '<div class="team-side"><div class="team-main-name">' + (m.team2 ? esc(m.team2.name) : 'TBD') + '</div></div>'
+  html += '<div class="team-side"><div class="team-main-name">' + n2 + '</div></div>'
   html += '</div></div>'
 
   html += '<div class="card"><div class="section-title mb-sm">比分</div>'
-  if (m.isRevival) html += '<div class="guide-tip">💡 复活赛采用抢7制，如 7-5、8-6</div>'
-  html += '<div class="score-row"><div class="score-label">' + (m.team1 ? esc(m.team1.name) : '队伍1') + '</div><input class="input-field" id="inp-s1" placeholder="如 6-4,7-5" value="' + esc(_ps.score1) + '"></div>'
-  html += '<div class="score-row"><div class="score-label">' + (m.team2 ? esc(m.team2.name) : '队伍2') + '</div><input class="input-field" id="inp-s2" placeholder="如 4-6,5-7" value="' + esc(_ps.score2) + '"></div>'
+  html += '<div class="guide-tip">💡 输入格式：每盘比分用逗号分隔，左边为 ' + n1 + ' 的得分</div>'
+  if (m.isRevival) html += '<div class="guide-tip">💡 复活赛采用抢7制，如 7-5</div>'
+  html += '<input class="input-field" id="inp-score" placeholder="如 6-4, 7-5" value="' + esc(_ps.scoreInput) + '" style="font-size:18px;text-align:center;letter-spacing:1px;font-weight:700">'
+
+  if (parsed) {
+    html += '<div class="score-preview">'
+    html += '<div class="score-preview-row"><span class="sp-name">' + n1 + '</span>'
+    parsed.sets.forEach(function (s) { html += '<span class="sp-set' + (s.a > s.b ? ' sp-win' : '') + '">' + s.a + '</span>' })
+    html += '<span class="sp-total">总' + parsed.t1Games + '局</span><span class="sp-net' + (parsed.t1Net > 0 ? ' sp-pos' : (parsed.t1Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t1Net > 0 ? '+' : '') + parsed.t1Net + '</span></div>'
+    html += '<div class="score-preview-row"><span class="sp-name">' + n2 + '</span>'
+    parsed.sets.forEach(function (s) { html += '<span class="sp-set' + (s.b > s.a ? ' sp-win' : '') + '">' + s.b + '</span>' })
+    html += '<span class="sp-total">总' + parsed.t2Games + '局</span><span class="sp-net' + (parsed.t2Net > 0 ? ' sp-pos' : (parsed.t2Net < 0 ? ' sp-neg' : '')) + '">净' + (parsed.t2Net > 0 ? '+' : '') + parsed.t2Net + '</span></div>'
+    html += '</div>'
+  }
   html += '</div>'
 
-  html += '<div class="card"><div class="section-title mb-sm">胜方</div>'
+  html += '<div class="card"><div class="section-title mb-sm">胜方' + (parsed && parsed.autoWinner ? ' <span style="font-size:11px;color:var(--text3);font-weight:400">（已自动判断，可手动修改）</span>' : '') + '</div>'
   html += '<div class="winner-options">'
   if (m.team1) {
-    html += '<div class="winner-option' + (_ps.winnerId === m.team1.id ? ' selected' : '') + '" data-wid="' + m.team1.id + '"><div class="winner-name">' + esc(m.team1.name) + '</div>'
+    html += '<div class="winner-option' + (_ps.winnerId === m.team1.id ? ' selected' : '') + '" data-wid="' + m.team1.id + '"><div class="winner-name">' + n1 + '</div>'
     if (_ps.winnerId === m.team1.id) html += '<div class="winner-check">✓</div>'
     html += '</div>'
   }
   if (m.team2) {
-    html += '<div class="winner-option' + (_ps.winnerId === m.team2.id ? ' selected' : '') + '" data-wid="' + m.team2.id + '"><div class="winner-name">' + esc(m.team2.name) + '</div>'
+    html += '<div class="winner-option' + (_ps.winnerId === m.team2.id ? ' selected' : '') + '" data-wid="' + m.team2.id + '"><div class="winner-name">' + n2 + '</div>'
     if (_ps.winnerId === m.team2.id) html += '<div class="winner-check">✓</div>'
     html += '</div>'
   }
@@ -1877,14 +1930,36 @@ function mountMatch(p) {
   var t = _t(p.id); if (!t) return
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   var _mk = _ps.matchKey
-  document.getElementById('inp-s1').oninput = function () { _ps.score1 = this.value; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].score1 = this.value } }
-  document.getElementById('inp-s2').oninput = function () { _ps.score2 = this.value; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].score2 = this.value } }
+  var m = null
+  if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
+  else if (p.koRi !== undefined) { var ri = +p.koRi, mi = +p.koMi; if (t.knockout && t.knockout[ri]) m = t.knockout[ri].matches[mi] }
+
+  var _scoreDebounce = null
+  var _inp = document.getElementById('inp-score')
+  _inp.oninput = function () {
+    var val = this.value, pos = this.selectionStart
+    _ps.scoreInput = val
+    _ps._cursor = pos
+    if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].scoreInput = val }
+    clearTimeout(_scoreDebounce)
+    _scoreDebounce = setTimeout(function () {
+      var parsed = _parseScoreInput(val)
+      if (parsed && m) {
+        if (parsed.autoWinner === 1 && m.team1) { _ps.winnerId = m.team1.id; if (_mk) _matchDrafts[_mk].winnerId = m.team1.id }
+        else if (parsed.autoWinner === 2 && m.team2) { _ps.winnerId = m.team2.id; if (_mk) _matchDrafts[_mk].winnerId = m.team2.id }
+      }
+      render()
+    }, 400)
+  }
+  if (_ps._cursor !== undefined) { _inp.focus(); _inp.setSelectionRange(_ps._cursor, _ps._cursor) }
 
   document.querySelectorAll('[data-wid]').forEach(function (el) {
     el.onclick = function () { _ps.winnerId = el.dataset.wid; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = el.dataset.wid }; render() }
   })
 
   document.getElementById('btn-save').onclick = function () {
+    var parsed = _parseScoreInput(_ps.scoreInput)
+    if (!parsed) { showToast('请输入有效比分，如 6-4, 7-5'); return }
     if (!_ps.winnerId) { showToast('请选择胜方'); return }
     t = getTournament(p.id)
     var isKo = p.koRi !== undefined
@@ -1894,7 +1969,7 @@ function mountMatch(p) {
     else if (isKo) { var ri = +p.koRi, mi = +p.koMi; if (t.knockout && t.knockout[ri]) m = t.knockout[ri].matches[mi] }
     if (!m) { showToast('比赛未找到'); return }
 
-    m.score1 = _ps.score1; m.score2 = _ps.score2; m.winnerId = _ps.winnerId; m.status = 'finished'
+    m.score1 = parsed.score1; m.score2 = parsed.score2; m.winnerId = _ps.winnerId; m.status = 'finished'
 
     if (isKo) {
       var ri = +p.koRi, mi = +p.koMi
@@ -1929,7 +2004,7 @@ function update9TeamProgress(t) {
    ==================================================================== */
 function renderRankings(p) {
   var t = _t(p.id)
-  if (!t) return '<div class="container"><div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">比赛不存在</div></div></div>'
+  if (!t) return _notFoundHtml()
   var fmt = t.format
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">🔒 只读模式 — 仅供查看</div>'
@@ -2083,11 +2158,13 @@ function initViewerMode() {
 window.addEventListener('hashchange', render)
 document.addEventListener('DOMContentLoaded', function () {
   initViewerMode()
+  _cloudSyncing = _isFirebaseConfigured() && !_viewer
   render()
   if (typeof initFirebase === 'function' && !_viewer) {
-    console.log('[App] Starting Firebase init...')
+    console.log('[App] Starting cloud init...')
     initFirebase().then(function () {
-      console.log('[App] Firebase done, firebaseReady=' + _firebaseReady + ', tournaments=' + getTournaments().length)
+      _cloudSyncing = false
+      console.log('[App] Cloud done, ready=' + _firebaseReady + ', tournaments=' + getTournaments().length)
       var cs = document.getElementById('cloud-status')
       if (cs) {
         if (_firebaseReady) {
@@ -2099,6 +2176,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       }
       render()
+    }).catch(function () {
+      _cloudSyncing = false
+      render()
     })
+  } else {
+    _cloudSyncing = false
   }
 })
