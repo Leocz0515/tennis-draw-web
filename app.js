@@ -1835,22 +1835,44 @@ function mountSchedule(p) {
 /* ====================================================================
    PAGE: MATCH (Score Entry)
    ==================================================================== */
-function _parseScoreInput(val) {
-  if (!val) return null
-  var sets = String(val).split(/[,，]/).map(function (s) { return s.trim() }).filter(Boolean)
-  var parsed = [], t1Games = 0, t2Games = 0, t1Sets = 0, t2Sets = 0
+function _initSetsFromScore(scoreStr) {
+  if (!scoreStr) return [{ a: '', b: '', tb: '' }]
+  var sets = []
+  String(scoreStr).split(/[,，]/).forEach(function (s) {
+    var m = s.trim().match(/(\d+)\s*[-:：]\s*(\d+)(?:\s*\((\d+)\s*[-:：]\s*(\d+)\))?/)
+    if (m) {
+      var tb = ''
+      if (m[3] && m[4]) tb = m[3] + '-' + m[4]
+      sets.push({ a: m[1], b: m[2], tb: tb })
+    }
+  })
+  return sets.length > 0 ? sets : [{ a: '', b: '', tb: '' }]
+}
+
+function _buildScoreFromSets(sets) {
+  var valid = [], t1G = 0, t2G = 0, t1S = 0, t2S = 0
   for (var i = 0; i < sets.length; i++) {
-    var m = sets[i].match(/(\d+)\s*[-:：]\s*(\d+)/)
-    if (!m) return null
-    var a = parseInt(m[1]), b = parseInt(m[2])
-    parsed.push({ a: a, b: b })
-    t1Games += a; t2Games += b
-    if (a > b) t1Sets++; else if (b > a) t2Sets++
+    var s = sets[i]
+    if (s.a === '' || s.b === '') continue
+    var a = parseInt(s.a) || 0, b = parseInt(s.b) || 0
+    var tbStr = ''
+    if (s.tb) {
+      var tbm = String(s.tb).match(/(\d+)\s*[-:：]?\s*(\d+)/)
+      if (tbm) tbStr = '(' + tbm[1] + '-' + tbm[2] + ')'
+    }
+    valid.push({ a: a, b: b, tbStr: tbStr, tb: s.tb })
+    t1G += a; t2G += b
+    if (a > b) t1S++; else if (b > a) t2S++
   }
-  if (parsed.length === 0) return null
-  var score1 = parsed.map(function (s) { return s.a + '-' + s.b }).join(', ')
-  var score2 = parsed.map(function (s) { return s.b + '-' + s.a }).join(', ')
-  return { sets: parsed, score1: score1, score2: score2, t1Games: t1Games, t2Games: t2Games, t1Sets: t1Sets, t2Sets: t2Sets, t1Net: t1Games - t2Games, t2Net: t2Games - t1Games, autoWinner: t1Sets > t2Sets ? 1 : (t2Sets > t1Sets ? 2 : 0) }
+  if (valid.length === 0) return null
+  var score1 = valid.map(function (v) { return v.a + '-' + v.b + (v.tbStr ? v.tbStr : '') }).join(', ')
+  var score2 = valid.map(function (v) { return v.b + '-' + v.a + (v.tbStr ? v.tbStr : '') }).join(', ')
+  return { sets: valid, score1: score1, score2: score2, t1Games: t1G, t2Games: t2G, t1Sets: t1S, t2Sets: t2S, t1Net: t1G - t2G, t2Net: t2G - t1G, autoWinner: t1S > t2S ? 1 : (t2S > t1S ? 2 : 0) }
+}
+
+function _isTiebreak(a, b) {
+  var x = parseInt(a) || 0, y = parseInt(b) || 0
+  return (x === 7 && y === 6) || (x === 6 && y === 7)
 }
 
 function renderMatch(p) {
@@ -1865,11 +1887,13 @@ function renderMatch(p) {
   var _mk = p.matchId || ('ko_' + p.koRi + '_' + p.koMi)
   var _draft = _matchDrafts[_mk]
   _ps.matchKey = _mk
-  var existingScore = m.score1 || ''
-  _ps.scoreInput = (_draft && _draft.scoreInput !== undefined) ? _draft.scoreInput : (_ps.scoreInput !== undefined ? _ps.scoreInput : existingScore)
+  if (!_ps.sets) {
+    var existingScore = (_draft && _draft.scoreInput) ? _draft.scoreInput : (m.score1 || '')
+    _ps.sets = _initSetsFromScore(existingScore)
+  }
   _ps.winnerId = (_draft && _draft.winnerId !== undefined) ? _draft.winnerId : (_ps.winnerId !== undefined ? _ps.winnerId : (m.winnerId || null))
 
-  var parsed = _parseScoreInput(_ps.scoreInput)
+  var parsed = _buildScoreFromSets(_ps.sets)
   if (parsed && !_ps.winnerId) {
     if (parsed.autoWinner === 1 && m.team1) _ps.winnerId = m.team1.id
     else if (parsed.autoWinner === 2 && m.team2) _ps.winnerId = m.team2.id
@@ -1890,10 +1914,30 @@ function renderMatch(p) {
   html += '<div class="team-side"><div class="team-main-name">' + n2 + '</div></div>'
   html += '</div></div>'
 
-  html += '<div class="card"><div class="section-title mb-sm">比分</div>'
-  html += '<div class="guide-tip">💡 输入格式：每盘比分用逗号分隔，左边为 ' + n1 + ' 的得分</div>'
-  if (m.isRevival) html += '<div class="guide-tip">💡 复活赛采用抢7制，如 7-5</div>'
-  html += '<input class="input-field" id="inp-score" placeholder="如 6-4, 7-5" value="' + esc(_ps.scoreInput) + '" style="font-size:18px;text-align:center;letter-spacing:1px;font-weight:700">'
+  html += '<div class="card"><div class="section-title mb-sm">比分（只需输入数字）</div>'
+  if (m.isRevival) html += '<div class="guide-tip">💡 复活赛采用抢7制</div>'
+
+  html += '<div class="set-header-row"><div class="set-hdr-label"></div><div class="set-hdr-name">' + n1 + '</div><div class="set-hdr-sep"></div><div class="set-hdr-name">' + n2 + '</div><div class="set-hdr-del"></div></div>'
+
+  _ps.sets.forEach(function (s, i) {
+    var hasTb = _isTiebreak(s.a, s.b)
+    html += '<div class="set-input-row" data-si="' + i + '">'
+    html += '<div class="set-label">第' + (i + 1) + '盘</div>'
+    html += '<input class="set-num" id="sa-' + i + '" type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99" value="' + esc(s.a) + '" placeholder="0">'
+    html += '<div class="set-sep">:</div>'
+    html += '<input class="set-num" id="sb-' + i + '" type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99" value="' + esc(s.b) + '" placeholder="0">'
+    if (_ps.sets.length > 1) html += '<div class="set-del" data-del="' + i + '">✕</div>'
+    else html += '<div class="set-del-ph"></div>'
+    html += '</div>'
+    if (hasTb) {
+      html += '<div class="tb-row" data-si="' + i + '">'
+      html += '<div class="tb-label">🎯 抢七小分</div>'
+      html += '<input class="set-num tb-num" id="tb-' + i + '" type="text" inputmode="numeric" value="' + esc(s.tb) + '" placeholder="如 7-5">'
+      html += '</div>'
+    }
+  })
+
+  html += '<div class="set-add-row"><button class="btn-secondary btn-mini" id="btn-add-set">＋ 添加一盘</button></div>'
 
   if (parsed) {
     html += '<div class="score-preview">'
@@ -1926,6 +1970,17 @@ function renderMatch(p) {
   return html
 }
 
+function _saveSetsToState(mk) {
+  if (!_ps.sets) return
+  var scoreStr = _ps.sets.map(function (s) {
+    if (s.a === '' && s.b === '') return ''
+    var base = (s.a || '0') + '-' + (s.b || '0')
+    if (s.tb) base += '(' + s.tb + ')'
+    return base
+  }).filter(Boolean).join(', ')
+  if (mk) { if (!_matchDrafts[mk]) _matchDrafts[mk] = {}; _matchDrafts[mk].scoreInput = scoreStr }
+}
+
 function mountMatch(p) {
   var t = _t(p.id); if (!t) return
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
@@ -1934,32 +1989,64 @@ function mountMatch(p) {
   if (p.matchId) { m = (t.matches || []).find(function (x) { return x.id === p.matchId }) }
   else if (p.koRi !== undefined) { var ri = +p.koRi, mi = +p.koMi; if (t.knockout && t.knockout[ri]) m = t.knockout[ri].matches[mi] }
 
-  var _scoreDebounce = null
-  var _inp = document.getElementById('inp-score')
-  _inp.oninput = function () {
-    var val = this.value, pos = this.selectionStart
-    _ps.scoreInput = val
-    _ps._cursor = pos
-    if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].scoreInput = val }
-    clearTimeout(_scoreDebounce)
-    _scoreDebounce = setTimeout(function () {
-      var parsed = _parseScoreInput(val)
-      if (parsed && m) {
-        if (parsed.autoWinner === 1 && m.team1) { _ps.winnerId = m.team1.id; if (_mk) _matchDrafts[_mk].winnerId = m.team1.id }
-        else if (parsed.autoWinner === 2 && m.team2) { _ps.winnerId = m.team2.id; if (_mk) _matchDrafts[_mk].winnerId = m.team2.id }
-      }
-      render()
-    }, 400)
+  function _onSetChange(focusId) {
+    _ps._focusId = focusId
+    var parsed = _buildScoreFromSets(_ps.sets)
+    if (parsed && m) {
+      if (parsed.autoWinner === 1 && m.team1) { _ps.winnerId = m.team1.id; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = m.team1.id } }
+      else if (parsed.autoWinner === 2 && m.team2) { _ps.winnerId = m.team2.id; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = m.team2.id } }
+    }
+    _saveSetsToState(_mk)
+    render()
   }
-  if (_ps._cursor !== undefined) { _inp.focus(); _inp.setSelectionRange(_ps._cursor, _ps._cursor) }
+
+  _ps.sets.forEach(function (s, i) {
+    var sa = document.getElementById('sa-' + i)
+    var sb = document.getElementById('sb-' + i)
+    if (sa) sa.oninput = function () {
+      _ps.sets[i].a = this.value
+      if (_isTiebreak(_ps.sets[i].a, _ps.sets[i].b) || !_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) {
+        if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
+      }
+      _onSetChange('sa-' + i)
+    }
+    if (sb) sb.oninput = function () {
+      _ps.sets[i].b = this.value
+      if (!_isTiebreak(_ps.sets[i].a, _ps.sets[i].b)) _ps.sets[i].tb = ''
+      _onSetChange('sb-' + i)
+    }
+    var tb = document.getElementById('tb-' + i)
+    if (tb) tb.oninput = function () { _ps.sets[i].tb = this.value; _saveSetsToState(_mk) }
+  })
+
+  document.getElementById('btn-add-set').onclick = function () {
+    _ps.sets.push({ a: '', b: '', tb: '' })
+    _ps._focusId = 'sa-' + (_ps.sets.length - 1)
+    _saveSetsToState(_mk); render()
+  }
+
+  document.querySelectorAll('[data-del]').forEach(function (el) {
+    el.onclick = function () {
+      var idx = +el.dataset.del
+      _ps.sets.splice(idx, 1)
+      if (_ps.sets.length === 0) _ps.sets = [{ a: '', b: '', tb: '' }]
+      _saveSetsToState(_mk); _onSetChange(null)
+    }
+  })
+
+  if (_ps._focusId) {
+    var fe = document.getElementById(_ps._focusId)
+    if (fe) { fe.focus(); if (fe.type === 'number') fe.select() }
+    _ps._focusId = null
+  }
 
   document.querySelectorAll('[data-wid]').forEach(function (el) {
     el.onclick = function () { _ps.winnerId = el.dataset.wid; if (_mk) { if (!_matchDrafts[_mk]) _matchDrafts[_mk] = {}; _matchDrafts[_mk].winnerId = el.dataset.wid }; render() }
   })
 
   document.getElementById('btn-save').onclick = function () {
-    var parsed = _parseScoreInput(_ps.scoreInput)
-    if (!parsed) { showToast('请输入有效比分，如 6-4, 7-5'); return }
+    var parsed = _buildScoreFromSets(_ps.sets)
+    if (!parsed) { showToast('请输入至少一盘比分'); return }
     if (!_ps.winnerId) { showToast('请选择胜方'); return }
     t = getTournament(p.id)
     var isKo = p.koRi !== undefined

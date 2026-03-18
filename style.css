@@ -283,6 +283,24 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .score-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .score-label{font-size:13px;width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .score-row .input-field{flex:1}
+.set-header-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 2px}
+.set-hdr-label{width:42px;flex-shrink:0}
+.set-hdr-name{flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set-hdr-sep{width:20px;flex-shrink:0}
+.set-hdr-del{width:28px;flex-shrink:0}
+.set-input-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.set-label{font-size:12px;font-weight:600;color:var(--text3);width:42px;flex-shrink:0;text-align:center}
+.set-num{width:0;flex:1;text-align:center;font-size:22px;font-weight:800;padding:10px 4px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);color:var(--text);outline:none;transition:var(--tr);-moz-appearance:textfield}
+.set-num::-webkit-inner-spin-button,.set-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.set-num:focus{border-color:var(--primary);background:rgba(124,92,252,.08);box-shadow:0 0 0 3px rgba(124,92,252,.15)}
+.set-sep{font-size:20px;font-weight:800;color:var(--text3);width:20px;text-align:center;flex-shrink:0}
+.set-del{width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--danger);cursor:pointer;opacity:.5;flex-shrink:0;border-radius:50%}
+.set-del:active{opacity:1;background:rgba(255,82,82,.1)}
+.set-del-ph{width:28px;flex-shrink:0}
+.tb-row{display:flex;align-items:center;gap:8px;margin:-4px 0 10px 42px;padding:6px 12px;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.2);border-radius:10px}
+.tb-label{font-size:11px;font-weight:600;color:#FFC107;white-space:nowrap;flex-shrink:0}
+.tb-num{width:80px!important;flex:0 0 80px!important;font-size:16px!important;padding:6px 8px!important;border-radius:8px!important}
+.set-add-row{text-align:center;margin:4px 0 10px}
 .score-preview{margin-top:14px;background:var(--card);border:1px solid var(--glass-border);border-radius:12px;padding:12px;overflow-x:auto}
 .score-preview-row{display:flex;align-items:center;gap:6px;padding:6px 0;font-size:13px}
 .score-preview-row:first-child{border-bottom:1px solid var(--glass-border)}
