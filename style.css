@@ -318,14 +318,20 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .auto-winner-bar{text-align:center;padding:12px 16px;border-radius:var(--r);background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.2);color:var(--mint);font-size:14px;margin-top:8px}
 
 /* Rankings */
-.standings-table{background:var(--card);backdrop-filter:blur(16px);border:1px solid var(--glass-border);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
-.table-header{display:flex;padding:10px 12px;background:var(--glass);border-bottom:1px solid var(--glass-border);font-size:11px;color:var(--text2);font-weight:700}
-.table-row{display:flex;align-items:center;padding:11px 12px;border-bottom:1px solid var(--glass-border);transition:var(--tr)}
+.standings-table{background:var(--card);backdrop-filter:blur(16px);border:1px solid var(--glass-border);border-radius:var(--rl);overflow:hidden;box-shadow:var(--shadow)}
+.table-header{display:flex;padding:12px 14px;background:linear-gradient(135deg,rgba(124,92,252,.10),rgba(124,92,252,.04));border-bottom:1px solid var(--glass-border);font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.table-row{display:flex;align-items:center;padding:13px 14px;border-bottom:1px solid rgba(255,255,255,.04);transition:var(--tr)}
 .table-row:last-child{border-bottom:none}
 .table-row:nth-child(even){background:rgba(255,255,255,.015)}
-.col-rank{width:30px;text-align:center;font-weight:700;color:var(--text3);font-size:13px}
-.col-rank.top{color:var(--accent2)}
-.col-name{flex:1;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden}
+.table-row.row-gold{background:linear-gradient(90deg,rgba(255,215,0,.08),transparent)}
+.table-row.row-silver{background:linear-gradient(90deg,rgba(192,192,192,.06),transparent)}
+.table-row.row-bronze{background:linear-gradient(90deg,rgba(205,127,50,.06),transparent)}
+.col-rank{width:36px;text-align:center;font-weight:700;color:var(--text3);font-size:13px;flex-shrink:0}
+.medal{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-size:13px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.medal-gold{background:linear-gradient(135deg,#FFD700,#FFA000);box-shadow:0 2px 10px rgba(255,215,0,.4)}
+.medal-silver{background:linear-gradient(135deg,#E0E0E0,#9E9E9E);box-shadow:0 2px 10px rgba(192,192,192,.3)}
+.medal-bronze{background:linear-gradient(135deg,#CD7F32,#A0522D);box-shadow:0 2px 10px rgba(205,127,50,.3)}
+.col-name{flex:1;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}
 .col-name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .col-stat{width:36px;text-align:center;font-size:12px;color:var(--text)}
 .col-points{width:48px;text-align:center}
@@ -338,15 +344,21 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .ko-team.tbd{color:var(--text3)}
 .ko-vs{color:var(--text3);font-size:12px;font-weight:700}
 
-.champion-card{background:linear-gradient(135deg,rgba(124,92,252,.2),rgba(255,123,172,.15));border:2px solid rgba(124,92,252,.3);border-radius:var(--rl);padding:24px;text-align:center;margin-top:14px;animation:glow 3s ease infinite}
-.champion-title{font-size:28px;margin-bottom:8px}
-.champion-name{font-size:22px;font-weight:800;background:linear-gradient(135deg,var(--primary-light),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.champion-card{background:linear-gradient(135deg,rgba(255,215,0,.12),rgba(255,160,0,.06));border:2px solid rgba(255,215,0,.25);border-radius:var(--rl);padding:28px 24px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden}
+.champion-card::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:conic-gradient(from 0deg,transparent,rgba(255,215,0,.06),transparent,rgba(255,215,0,.04),transparent);animation:spin 8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.champion-crown{width:48px;height:48px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#FFD700,#FFA000);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;box-shadow:0 4px 20px rgba(255,215,0,.35);position:relative;z-index:1}
+.champion-title{font-size:12px;color:var(--text2);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;position:relative;z-index:1}
+.champion-name{font-size:24px;font-weight:800;background:linear-gradient(135deg,#FFD700,#FFA000);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;z-index:1}
 
 /* Final Rankings */
-.final-rank-item{display:flex;align-items:center;padding:12px 14px;background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--glass-border);border-radius:var(--rs);margin-bottom:8px;box-shadow:var(--shadow)}
-.final-rank-pos{width:40px;text-align:center;font-size:18px;font-weight:800}
-.final-rank-name{flex:1;font-size:15px;font-weight:600;margin-left:8px}
-.final-rank-label{font-size:12px;color:var(--text2)}
+.final-rank-item{display:flex;align-items:center;padding:14px 16px;background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--glass-border);border-radius:var(--r);margin-bottom:8px;box-shadow:var(--shadow);transition:var(--tr)}
+.final-rank-item:first-child{border-color:rgba(255,215,0,.2);background:linear-gradient(90deg,rgba(255,215,0,.06),transparent)}
+.final-rank-item:nth-child(2){border-color:rgba(192,192,192,.15);background:linear-gradient(90deg,rgba(192,192,192,.04),transparent)}
+.final-rank-item:nth-child(3){border-color:rgba(205,127,50,.15);background:linear-gradient(90deg,rgba(205,127,50,.04),transparent)}
+.final-rank-pos{width:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.final-rank-name{flex:1;font-size:15px;font-weight:600;margin-left:10px}
+.final-rank-label{font-size:11px;color:var(--text3);font-weight:500}
 
 /* Custom Grouping */
 .custom-group-row{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--glass-border);gap:8px}

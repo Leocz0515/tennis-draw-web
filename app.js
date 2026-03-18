@@ -2227,6 +2227,13 @@ function update9TeamProgress(t) {
 /* ====================================================================
    PAGE: RANKINGS
    ==================================================================== */
+function _medalHtml(rank) {
+  if (rank === 1) return '<span class="medal medal-gold">1</span>'
+  if (rank === 2) return '<span class="medal medal-silver">2</span>'
+  if (rank === 3) return '<span class="medal medal-bronze">3</span>'
+  return '<span style="color:var(--text3);font-weight:700">' + rank + '</span>'
+}
+
 function renderRankings(p) {
   var t = _t(p.id)
   if (!t) return _notFoundHtml()
@@ -2262,7 +2269,7 @@ function renderStandardRankings(t) {
     if (finalRound && finalRound.matches[0] && finalRound.matches[0].winnerId) {
       var fm = finalRound.matches[0]
       var champion = fm.team1.id === fm.winnerId ? fm.team1 : fm.team2
-      html += '<div class="champion-card"><div class="champion-title">冠军</div><div class="champion-name">' + esc(champion.name) + '</div><div class="text-sm text-secondary mt-xs">冠军</div></div>'
+      html += '<div class="champion-card"><div class="champion-crown">1</div><div class="champion-title">CHAMPION</div><div class="champion-name">' + esc(champion.name) + '</div></div>'
     }
   }
   return html
@@ -2274,7 +2281,7 @@ function renderFourRotationRankings(t) {
   var allDone = matches.length > 0 && matches.every(function (m) { return m.status === 'finished' })
   var html = ''
   if (allDone && st.length > 0) {
-    html += '<div class="champion-card"><div class="champion-title">冠军</div><div class="champion-name">' + esc(st[0].name) + '</div><div class="text-sm text-secondary mt-xs">冠军</div></div>'
+    html += '<div class="champion-card"><div class="champion-crown">1</div><div class="champion-title">CHAMPION</div><div class="champion-name">' + esc(st[0].name) + '</div></div>'
   }
   html += '<div class="round-header">个人排名</div>'
   html += '<div class="standings-table">'
@@ -2282,9 +2289,9 @@ function renderFourRotationRankings(t) {
   st.forEach(function (s, i) {
     var net = s.gamesFor - s.gamesAgainst
     var netStr = net > 0 ? '+' + net : String(net)
-    html += '<div class="table-row"><div class="col-rank' + (i < 3 ? ' top' : '') + '">'
-    if (i < 3) html += ['金', '银', '铜'][i]
-    else html += (i + 1)
+    var rowCls = i === 0 ? ' row-gold' : (i === 1 ? ' row-silver' : (i === 2 ? ' row-bronze' : ''))
+    html += '<div class="table-row' + rowCls + '"><div class="col-rank">'
+    html += _medalHtml(i + 1)
     html += '</div><div class="col-name">' + esc(s.name) + '</div><div class="col-stat text-bold">' + s.wins + '</div><div class="col-stat">' + s.losses + '</div><div class="col-stat">' + s.gamesFor + '</div><div class="col-stat">' + s.gamesAgainst + '</div><div class="col-points"><span class="score-badge' + (net > 0 ? ' badge-pos' : (net < 0 ? ' badge-neg' : '')) + '">' + netStr + '</span></div></div>'
   })
   html += '</div>'
@@ -2355,11 +2362,10 @@ function render9TeamRankings(t) {
     var rk = compute9TeamFinalRankings(t)
     if (rk.length === 0) { html += '<div class="empty-state" style="padding:20px"><div class="empty-text">比赛尚未全部完成</div></div>' }
     else {
-      if (rk[0]) html += '<div class="champion-card"><div class="champion-title">冠军</div><div class="champion-name">' + esc(rk[0].team.name) + '</div><div class="text-sm text-secondary mt-xs">冠军</div></div>'
+      if (rk[0]) html += '<div class="champion-card"><div class="champion-crown">1</div><div class="champion-title">CHAMPION</div><div class="champion-name">' + esc(rk[0].team.name) + '</div></div>'
       html += '<div class="mt-md">'
       rk.forEach(function (r) {
-        var posIcon = r.rank <= 3 ? ['金', '银', '铜'][r.rank - 1] : '#' + r.rank
-        html += '<div class="final-rank-item"><div class="final-rank-pos">' + posIcon + '</div><div class="final-rank-name">' + esc(r.team.name) + '</div><div class="final-rank-label">' + esc(r.label) + '</div></div>'
+        html += '<div class="final-rank-item"><div class="final-rank-pos">' + _medalHtml(r.rank) + '</div><div class="final-rank-name">' + esc(r.team.name) + '</div><div class="final-rank-label">' + esc(r.label) + '</div></div>'
       })
       html += '</div>'
     }
@@ -2374,9 +2380,9 @@ function renderStandingsTable(standings, qualifyCount) {
   standings.forEach(function (s, i) {
     var net = (s.scoreFor || 0) - (s.scoreAgainst || 0)
     var netStr = net > 0 ? '+' + net : String(net)
-    html += '<div class="table-row"><div class="col-rank' + (i < 3 ? ' top' : '') + '">'
-    if (i < 3) html += ['金', '银', '铜'][i]
-    else html += (i + 1)
+    var rowCls = i === 0 ? ' row-gold' : (i === 1 ? ' row-silver' : (i === 2 ? ' row-bronze' : ''))
+    html += '<div class="table-row' + rowCls + '"><div class="col-rank">'
+    html += _medalHtml(i + 1)
     html += '</div><div class="col-name">' + esc(s.name)
     if (qualifyCount > 0 && i < qualifyCount) html += ' <span class="qualify-tag">出线</span>'
     html += '</div><div class="col-stat text-bold">' + s.wins + '</div><div class="col-stat">' + s.losses + '</div><div class="col-stat' + (net > 0 ? ' text-primary' : (net < 0 ? ' text-danger' : '')) + '">' + netStr + '</div><div class="col-points"><span class="score-badge">' + s.points + '</span></div></div>'
