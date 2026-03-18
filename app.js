@@ -142,19 +142,28 @@ function render() {
       if (lid !== curId) stopListenTournament(lid)
     })
   }
-  var html = '', page = 'home'
-  if (r.path === '/' || r.path === '') { html = renderHome(r.params); page = 'home' }
-  else if (r.path === '/create') { html = renderCreate(r.params); page = 'create' }
-  else if (r.path === '/players') { html = renderPlayers(r.params); page = 'players' }
-  else if (r.path === '/pairing') { html = renderPairing(r.params); page = 'pairing' }
-  else if (r.path === '/settings') { html = renderSettings(r.params); page = 'settings' }
-  else if (r.path === '/result') { html = renderResult(r.params); page = 'result' }
-  else if (r.path === '/schedule') { html = renderSchedule(r.params); page = 'schedule' }
-  else if (r.path === '/match') { html = renderMatch(r.params); page = 'match' }
-  else if (r.path === '/rankings') { html = renderRankings(r.params); page = 'rankings' }
-  else { html = renderHome(r.params); page = 'home' }
+  var page = 'home'
+  if (r.path === '/' || r.path === '') page = 'home'
+  else if (r.path === '/create') page = 'create'
+  else if (r.path === '/players') page = 'players'
+  else if (r.path === '/pairing') page = 'pairing'
+  else if (r.path === '/settings') page = 'settings'
+  else if (r.path === '/result') page = 'result'
+  else if (r.path === '/schedule') page = 'schedule'
+  else if (r.path === '/match') page = 'match'
+  else if (r.path === '/rankings') page = 'rankings'
   if (page !== _currentPage) _ps = {}
   _currentPage = page
+  var html = ''
+  if (page === 'home') html = renderHome(r.params)
+  else if (page === 'create') html = renderCreate(r.params)
+  else if (page === 'players') html = renderPlayers(r.params)
+  else if (page === 'pairing') html = renderPairing(r.params)
+  else if (page === 'settings') html = renderSettings(r.params)
+  else if (page === 'result') html = renderResult(r.params)
+  else if (page === 'schedule') html = renderSchedule(r.params)
+  else if (page === 'match') html = renderMatch(r.params)
+  else if (page === 'rankings') html = renderRankings(r.params)
   app.innerHTML = html
   if (page === 'home') mountHome(r.params)
   else if (page === 'create') mountCreate(r.params)
