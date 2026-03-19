@@ -1994,6 +1994,7 @@ function renderMatch(p) {
     html += '<input class="set-num tb-num" id="tb1-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb1 || '0') + '" placeholder="0">'
     html += '<div class="tb-sep">:</div>'
     html += '<input class="set-num tb-num" id="tb2-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" value="' + esc(s.tb2 || '0') + '" placeholder="0">'
+    html += '<div class="set-del-ph"></div>'
     html += '</div>'
   })
 
