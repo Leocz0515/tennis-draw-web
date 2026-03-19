@@ -197,7 +197,7 @@ function renderHome() {
   html += '<div class="home-header"><div class="home-title">TENNIS GO!</div><div class="home-subtitle">积分分组 · 赛程管理 · 比分录入</div></div>'
   if (!_viewer) {
     html += '<div class="search-box"><input class="input-field" id="home-search" placeholder="搜索比赛名称..." value="' + esc(_ps.q || '') + '"><button class="btn-primary" id="btn-search" style="padding:0 18px;flex-shrink:0;border-radius:var(--pill);font-size:16px">搜索</button>'
-    if (_firebaseReady) html += '<button class="btn-icon" id="btn-refresh" title="刷新" style="font-size:18px;opacity:.5;flex-shrink:0">刷新</button>'
+    if (_firebaseReady) html += '<button class="btn-home-link" id="btn-refresh" style="flex-shrink:0">刷新</button>'
     html += '</div>'
     if (_isFirebaseConfigured() && !_firebaseReady) {
       html += '<div id="cloud-status" class="text-center text-hint" style="padding:8px;font-size:12px;opacity:.5">云端同步中...</div>'
@@ -1271,7 +1271,7 @@ function renderSchedule(p) {
   var fmt = t.format, matches = t.matches || []
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">只读模式 - 仅供查看</div>'
-  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">赛程</div><button class="btn-icon" id="btn-rankings">排名</button></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">赛程</div><button class="btn-home-link" id="btn-rankings">排名</button></div>'
   html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div>'
   if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">编辑</button>'
   html += '</div></div>'
