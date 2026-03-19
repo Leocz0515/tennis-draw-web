@@ -716,9 +716,9 @@ function compute9TeamFinalRankings(tournament) {
 
 /* ===== Image Export ===== */
 var IMG_THEMES = {
-  light: {bg:'linear-gradient(160deg,#FAFBFF 0%,#E8ECF4 50%,#F0F4F8 100%)',text:'#1A1A2E',accent:'#6C5CE7',sub:'#636E72',border:'rgba(108,92,231,.12)',badge:'linear-gradient(135deg,#6C5CE7,#A29BFE)',badgeText:'#fff',cardBg:'rgba(108,92,231,.04)',headerBg:'linear-gradient(135deg,#6C5CE7,#A29BFE)',headerText:'#fff',tagBg:'rgba(108,92,231,.1)',tagText:'#6C5CE7'},
+  light: {bg:'linear-gradient(160deg,#E3F2FD 0%,#BBDEFB 50%,#E1F5FE 100%)',text:'#0D47A1',accent:'#1976D2',sub:'#5C6BC0',border:'rgba(25,118,210,.12)',badge:'linear-gradient(135deg,#1976D2,#42A5F5)',badgeText:'#fff',cardBg:'rgba(25,118,210,.04)',headerBg:'linear-gradient(135deg,#1976D2,#42A5F5)',headerText:'#fff',tagBg:'rgba(25,118,210,.1)',tagText:'#1976D2'},
   green: {bg:'linear-gradient(160deg,#E8F5E9 0%,#C8E6C9 50%,#A5D6A7 100%)',text:'#1B5E20',accent:'#2E7D32',sub:'#388E3C',border:'rgba(46,125,50,.15)',badge:'linear-gradient(135deg,#2E7D32,#4CAF50)',badgeText:'#fff',cardBg:'rgba(46,125,50,.05)',headerBg:'linear-gradient(135deg,#2E7D32,#43A047)',headerText:'#fff',tagBg:'rgba(46,125,50,.1)',tagText:'#2E7D32'},
-  dark:  {bg:'linear-gradient(160deg,#0B0B1A 0%,#1A1A3E 50%,#12122A 100%)',text:'#EEEEFF',accent:'#9B7FFF',sub:'#8888AA',border:'rgba(155,127,255,.15)',badge:'linear-gradient(135deg,#7C5CFC,#9B7FFF)',badgeText:'#fff',cardBg:'rgba(155,127,255,.06)',headerBg:'linear-gradient(135deg,#7C5CFC,#9B7FFF)',headerText:'#fff',tagBg:'rgba(155,127,255,.12)',tagText:'#B8A4FF'},
+  dark:  {bg:'linear-gradient(160deg,#0D47A1 0%,#1565C0 50%,#0D47A1 100%)',text:'#FFFFFF',accent:'#64B5F6',sub:'#90CAF9',border:'rgba(100,181,246,.15)',badge:'linear-gradient(135deg,#1976D2,#42A5F5)',badgeText:'#fff',cardBg:'rgba(100,181,246,.06)',headerBg:'linear-gradient(135deg,#1565C0,#1976D2)',headerText:'#fff',tagBg:'rgba(100,181,246,.12)',tagText:'#90CAF9'},
   purple:{bg:'linear-gradient(160deg,#1A0B2E 0%,#2D1B69 40%,#16213E 100%)',text:'#F0E6FF',accent:'#BB86FC',sub:'#9575CD',border:'rgba(187,134,252,.15)',badge:'linear-gradient(135deg,#BB86FC,#E040FB)',badgeText:'#fff',cardBg:'rgba(187,134,252,.06)',headerBg:'linear-gradient(135deg,#BB86FC,#E040FB)',headerText:'#fff',tagBg:'rgba(187,134,252,.12)',tagText:'#CE93D8'}
 }
 
@@ -729,7 +729,7 @@ function renderExportImage(title, bodyHtml, theme) {
   var headerHtml = '<div style="background:'+th.headerBg+';padding:28px 32px 24px;position:relative;overflow:hidden">'
   headerHtml += '<div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.1)"></div>'
   headerHtml += '<div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.06)"></div>'
-  headerHtml += '<div style="font-size:28px;margin-bottom:4px;position:relative;font-weight:900;color:'+th.headerText+'">🎾 TENNIS GO!</div>'
+  headerHtml += '<div style="font-size:28px;margin-bottom:4px;position:relative;font-weight:900;color:'+th.headerText+'">TENNIS GO!</div>'
   headerHtml += '<div style="font-size:20px;font-weight:800;color:'+th.headerText+';position:relative;line-height:1.3">'+esc(title)+'</div>'
   headerHtml += '<div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:8px;position:relative">'+formatTime(Date.now())+'</div>'
   headerHtml += '</div>'

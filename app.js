@@ -218,7 +218,7 @@ function renderHome() {
       if (_mc > 0) html += '<span class="tag tag-purple">' + _fc + '/' + _mc + '场</span>'
       html += '</div>'
       html += '<div class="tournament-time">' + formatTime(t.createTime) + '</div>'
-      html += '<div class="share-icon" data-qr="' + t.id + '" title="二维码">QR</div>'
+      
       html += '</div>'
       if (mine) html += '<div class="swipe-delete">删除</div></div>'
     })
@@ -355,24 +355,6 @@ function mountHome() {
         onConfirm: function () { deleteTournament(tid); render() }
       })
     }
-  })
-  document.querySelectorAll('[data-qr]').forEach(function (el) {
-    el.onclick = function (e) {
-      e.stopPropagation()
-      showQRCode(el.dataset.qr)
-    }
-  })
-}
-
-function showQRCode(tid) {
-  var base = location.origin + location.pathname
-  var url = base + '#/schedule?id=' + tid + '&view=1'
-  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url)
-  showModal({
-    title: '比赛二维码',
-    content: '<div style="text-align:center"><img src="' + qrUrl + '" style="width:200px;height:200px;border-radius:8px;background:#fff;padding:8px" alt="QR"><div style="margin-top:10px;font-size:12px;color:var(--text2)">扫码查看比赛结果（只读）</div></div>',
-    showCancel: false,
-    confirmText: '关闭'
   })
 }
 
@@ -994,7 +976,7 @@ function renderResult(p) {
     } else {
       html += '<div class="action-row"><button class="btn-primary" id="btn-gen-schedule">生成赛程</button>'
     }
-    html += '<button class="btn-accent" id="btn-qr">二维码</button></div>'
+    html += '</div>'
     html += '<div class="action-row"><button class="btn-secondary" id="btn-export">导出</button>'
     if (_canEdit(t)) html += '<button class="btn-undo" id="btn-undo-draw">撤回分组</button>'
     html += '</div></div>'
@@ -1046,8 +1028,6 @@ function mountResult(p) {
     saveTournament(t)
     showToast('赛程已生成'); navigate('/schedule?id=' + t.id)
   }
-  var qrBtn = document.getElementById('btn-qr')
-  if (qrBtn) qrBtn.onclick = function () { showQRCode(p.id) }
   var ex = document.getElementById('btn-export')
   if (ex) ex.onclick = function () { doExport(t) }
   var ud = document.getElementById('btn-undo-draw')
@@ -1123,11 +1103,11 @@ function exportAsImage(t, type, theme) {
       var rk = compute9TeamFinalRankings(t)
       if (rk.length > 0) {
         rk.forEach(function (r) {
-          var icon = r.rank <= 3 ? ['金','银','铜'][r.rank-1] : ''
           var isMedal = r.rank <= 3
+          var medalColors = ['linear-gradient(135deg,#FFD700,#FFA000)','linear-gradient(135deg,#E0E0E0,#9E9E9E)','linear-gradient(135deg,#CD7F32,#A0522D)']
           var cardStyle = isMedal ? 'background:'+th.cardBg+';border:1px solid '+th.border+';border-radius:12px;padding:14px 16px;margin-bottom:8px' : 'padding:10px 16px;margin-bottom:4px;border-bottom:1px solid '+th.border
           body += '<div style="display:flex;align-items:center;'+cardStyle+'">'
-          if (isMedal) { body += '<span style="font-size:28px;margin-right:12px">'+icon+'</span>' }
+          if (isMedal) { body += '<span style="width:32px;height:32px;border-radius:50%;background:'+medalColors[r.rank-1]+';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff;margin-right:12px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2)">'+r.rank+'</span>' }
           else { body += '<span style="width:32px;height:32px;border-radius:50%;background:'+th.cardBg+';border:1px solid '+th.border+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+th.sub+';margin-right:12px;flex-shrink:0">'+r.rank+'</span>' }
           body += '<div style="flex:1"><div style="font-size:'+(isMedal?'16':'14')+'px;font-weight:'+(isMedal?'800':'600')+'">'+esc(r.team.name)+'</div></div>'
           body += '<span style="background:'+th.tagBg+';color:'+th.tagText+';padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600">'+esc(r.label)+'</span>'
@@ -1146,7 +1126,8 @@ function exportAsImage(t, type, theme) {
           var netStr = net > 0 ? '+'+net : String(net)
           var rowBg = i % 2 === 0 ? 'transparent' : th.cardBg
           body += '<div style="display:flex;align-items:center;padding:9px 16px;background:'+rowBg+'">'
-          var rankStyle = i < 3 ? 'width:24px;height:24px;border-radius:50%;background:'+th.badge+';color:'+th.badgeText+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800' : 'width:24px;text-align:center;font-size:12px;color:'+th.sub+';font-weight:600'
+          var medalColors2 = ['linear-gradient(135deg,#FFD700,#FFA000)','linear-gradient(135deg,#E0E0E0,#9E9E9E)','linear-gradient(135deg,#CD7F32,#A0522D)']
+          var rankStyle = i < 3 ? 'width:24px;height:24px;border-radius:50%;background:'+medalColors2[i]+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.2)' : 'width:24px;text-align:center;font-size:12px;color:'+th.sub+';font-weight:600'
           body += '<span style="'+rankStyle+';margin-right:6px">'+(i+1)+'</span>'
           body += '<span style="flex:1;font-size:13px;font-weight:600">'+esc(s.name)+'</span>'
           body += '<span style="width:50px;text-align:center;font-size:12px;color:'+th.sub+'">'+s.wins+'胜'+s.losses+'负</span>'
@@ -2240,7 +2221,8 @@ function renderRankings(p) {
   var fmt = t.format
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">只读模式 - 仅供查看</div>'
-  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">排名</div><div style="width:40px"></div></div>'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">排名</div><button class="btn-home-link" id="btn-back-schedule" style="font-size:13px">赛程</button></div>'
+  html += '<div class="flex-between mb-sm"><button class="btn-export-img" id="btn-export-ranking">导出排名图片</button></div>'
 
   if (fmt === 'nine-team') {
     html += render9TeamRankings(t)
@@ -2394,6 +2376,12 @@ function renderStandingsTable(standings, qualifyCount) {
 function mountRankings(p) {
   if (typeof listenToTournament === 'function') listenToTournament(p.id)
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
+  document.getElementById('btn-back-schedule').onclick = function () { navigate('/schedule?id=' + p.id) }
+  var _exr = document.getElementById('btn-export-ranking')
+  if (_exr) _exr.onclick = function () {
+    var t = _t(p.id); if (!t) return
+    chooseImageTheme(t, 'rankings')
+  }
   document.querySelectorAll('[data-rtab]').forEach(function (el) {
     el.onclick = function () { _ps.rankTab = el.dataset.rtab; render() }
   })
