@@ -716,10 +716,10 @@ function compute9TeamFinalRankings(tournament) {
 
 /* ===== Image Export ===== */
 var IMG_THEMES = {
-  light: {bg:'linear-gradient(160deg,#F5F8FF 0%,#E8F0FE 50%,#EFF6FF 100%)',text:'#1A2B50',accent:'#165DFF',sub:'#6B7A99',border:'rgba(22,93,255,.1)',badge:'linear-gradient(135deg,#165DFF,#5B8FFF)',badgeText:'#fff',cardBg:'rgba(22,93,255,.03)',headerBg:'linear-gradient(135deg,#165DFF,#4B82FF)',headerText:'#fff',tagBg:'rgba(22,93,255,.08)',tagText:'#165DFF'},
-  green: {bg:'linear-gradient(160deg,#F0FBE8 0%,#D4F4C0 50%,#E0F7D0 100%)',text:'#1B3A10',accent:'#5CBF3A',sub:'#4A8A32',border:'rgba(126,217,87,.12)',badge:'linear-gradient(135deg,#5CBF3A,#7ED957)',badgeText:'#fff',cardBg:'rgba(126,217,87,.04)',headerBg:'linear-gradient(135deg,#5CBF3A,#7ED957)',headerText:'#fff',tagBg:'rgba(126,217,87,.1)',tagText:'#3D9920'},
-  dark:  {bg:'linear-gradient(160deg,#0E4FE0 0%,#165DFF 50%,#0B3FC0 100%)',text:'#FFFFFF',accent:'#7ED957',sub:'rgba(255,255,255,.55)',border:'rgba(255,255,255,.1)',badge:'linear-gradient(135deg,#7ED957,#5CBF3A)',badgeText:'#fff',cardBg:'rgba(255,255,255,.06)',headerBg:'linear-gradient(135deg,#165DFF,#4B82FF)',headerText:'#fff',tagBg:'rgba(126,217,87,.12)',tagText:'#A8E87C'},
-  purple:{bg:'linear-gradient(160deg,#1A0B2E 0%,#2D1B69 40%,#16213E 100%)',text:'#F0E6FF',accent:'#BB86FC',sub:'#9575CD',border:'rgba(187,134,252,.15)',badge:'linear-gradient(135deg,#BB86FC,#E040FB)',badgeText:'#fff',cardBg:'rgba(187,134,252,.06)',headerBg:'linear-gradient(135deg,#BB86FC,#E040FB)',headerText:'#fff',tagBg:'rgba(187,134,252,.12)',tagText:'#CE93D8'}
+  light: {bg:'#F8FAFB',text:'#1A1D28',accent:'#10B981',sub:'#6B7280',border:'rgba(0,0,0,.06)',badge:'#10B981',badgeText:'#fff',cardBg:'rgba(0,0,0,.02)',headerBg:'#10B981',headerText:'#fff',tagBg:'rgba(16,185,129,.08)',tagText:'#059669'},
+  green: {bg:'#F0FDF4',text:'#14532D',accent:'#059669',sub:'#4B5563',border:'rgba(5,150,105,.08)',badge:'#059669',badgeText:'#fff',cardBg:'rgba(5,150,105,.03)',headerBg:'#059669',headerText:'#fff',tagBg:'rgba(5,150,105,.08)',tagText:'#047857'},
+  dark:  {bg:'#0E1015',text:'#EAEDF3',accent:'#10B981',sub:'rgba(255,255,255,.45)',border:'rgba(255,255,255,.06)',badge:'#10B981',badgeText:'#fff',cardBg:'rgba(255,255,255,.04)',headerBg:'#1A1D28',headerText:'#EAEDF3',tagBg:'rgba(16,185,129,.1)',tagText:'#6EE7B7'},
+  purple:{bg:'#0F0A1A',text:'#E8E0F0',accent:'#A78BFA',sub:'#7C6F96',border:'rgba(167,139,250,.1)',badge:'#A78BFA',badgeText:'#fff',cardBg:'rgba(167,139,250,.04)',headerBg:'#1E1530',headerText:'#E8E0F0',tagBg:'rgba(167,139,250,.08)',tagText:'#C4B5FD'}
 }
 
 function renderExportImage(title, bodyHtml, theme) {

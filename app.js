@@ -82,7 +82,7 @@ function showCustomMatchModal(opts) {
   for (var i = 0; i < mc; i++) {
     var lb = opts.labels ? opts.labels[i] : ('第' + (i + 1) + '场')
     html += '<div class="card" style="padding:12px;margin-bottom:8px">'
-    html += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:var(--primary-light)">' + esc(lb) + '</div>'
+    html += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:var(--accent)">' + esc(lb) + '</div>'
     html += '<div style="display:flex;align-items:center;gap:8px">'
     html += '<select class="input-field" id="cm-a-' + i + '" style="flex:1"><option value="">选择</option>'
     teams.forEach(function (t) { html += '<option value="' + t.id + '">' + esc(t.name) + '</option>' })
