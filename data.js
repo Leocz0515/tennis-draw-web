@@ -716,9 +716,9 @@ function compute9TeamFinalRankings(tournament) {
 
 /* ===== Image Export ===== */
 var IMG_THEMES = {
-  light: {bg:'#F8FAFB',text:'#1A1D28',accent:'#10B981',sub:'#6B7280',border:'rgba(0,0,0,.06)',badge:'#10B981',badgeText:'#fff',cardBg:'rgba(0,0,0,.02)',headerBg:'#10B981',headerText:'#fff',tagBg:'rgba(16,185,129,.08)',tagText:'#059669'},
-  green: {bg:'#F0FDF4',text:'#14532D',accent:'#059669',sub:'#4B5563',border:'rgba(5,150,105,.08)',badge:'#059669',badgeText:'#fff',cardBg:'rgba(5,150,105,.03)',headerBg:'#059669',headerText:'#fff',tagBg:'rgba(5,150,105,.08)',tagText:'#047857'},
-  dark:  {bg:'#0E1015',text:'#EAEDF3',accent:'#10B981',sub:'rgba(255,255,255,.45)',border:'rgba(255,255,255,.06)',badge:'#10B981',badgeText:'#fff',cardBg:'rgba(255,255,255,.04)',headerBg:'#1A1D28',headerText:'#EAEDF3',tagBg:'rgba(16,185,129,.1)',tagText:'#6EE7B7'},
+  light: {bg:'#F8FAFB',text:'#1A1D28',accent:'#6B8E23',sub:'#6B7280',border:'rgba(0,0,0,.06)',badge:'#8BCC26',badgeText:'#111',cardBg:'rgba(0,0,0,.02)',headerBg:'#8BCC26',headerText:'#111',tagBg:'rgba(173,255,47,.08)',tagText:'#5A7A1E'},
+  green: {bg:'#F5FFE8',text:'#2D3A10',accent:'#6B8E23',sub:'#4B5563',border:'rgba(139,204,38,.08)',badge:'#8BCC26',badgeText:'#111',cardBg:'rgba(139,204,38,.03)',headerBg:'#8BCC26',headerText:'#111',tagBg:'rgba(139,204,38,.08)',tagText:'#5A7A1E'},
+  dark:  {bg:'#0E1015',text:'#EAEDF3',accent:'#ADFF2F',sub:'rgba(255,255,255,.45)',border:'rgba(255,255,255,.06)',badge:'#ADFF2F',badgeText:'#111',cardBg:'rgba(255,255,255,.04)',headerBg:'#1A1D28',headerText:'#EAEDF3',tagBg:'rgba(173,255,47,.1)',tagText:'#CCFF66'},
   purple:{bg:'#0F0A1A',text:'#E8E0F0',accent:'#A78BFA',sub:'#7C6F96',border:'rgba(167,139,250,.1)',badge:'#A78BFA',badgeText:'#fff',cardBg:'rgba(167,139,250,.04)',headerBg:'#1E1530',headerText:'#E8E0F0',tagBg:'rgba(167,139,250,.08)',tagText:'#C4B5FD'}
 }
 
