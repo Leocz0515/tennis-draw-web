@@ -1113,7 +1113,7 @@ function renderDuelMeetSettings(p, t) {
     html += '<div class="method-input-row"><span class="seed-label">' + row[1] + '</span><input class="input-field method-input" id="dmcfg-' + row[0] + '" type="number" min="0" value="' + (parseInt(cfg[row[0]]) || 0) + '"><span class="text-sm text-hint ml-sm">场</span></div>'
   })
   html += '</div>'
-  html += '<div class="divider"></div><div class="text-sm text-secondary">总场次：' + totalMatches + ' 场</div></div>'
+  html += '<div class="divider"></div><div class="text-sm text-secondary" id="duel-total-count">总场次：' + totalMatches + ' 场</div></div>'
   html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (totalMatches <= 0 ? ' btn-disabled' : '') + '" id="btn-next">下一步：自定义对阵 →</button></div>'
   html += '</div>'
   return html
@@ -1121,6 +1121,31 @@ function renderDuelMeetSettings(p, t) {
 
 function mountDuelMeetSettings(p, t) {
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
+  function _syncDuelConfigPreview() {
+    var total = 0
+    DUEL_CONFIG_KEYS.forEach(function (key) {
+      var el = document.getElementById('dmcfg-' + key)
+      var val = Math.max(0, parseInt(el && el.value) || 0)
+      if (el && String(val) !== el.value) el.value = val
+      total += val
+    })
+    var totalEl = document.getElementById('duel-total-count')
+    if (totalEl) totalEl.textContent = '总场次：' + total + ' 场'
+    var btn = document.getElementById('btn-next')
+    if (btn) {
+      if (total <= 0) btn.classList.add('btn-disabled')
+      else btn.classList.remove('btn-disabled')
+    }
+    return total
+  }
+  DUEL_CONFIG_KEYS.forEach(function (key) {
+    var el = document.getElementById('dmcfg-' + key)
+    if (el) {
+      el.oninput = _syncDuelConfigPreview
+      el.onchange = _syncDuelConfigPreview
+    }
+  })
+  _syncDuelConfigPreview()
   document.getElementById('btn-next').onclick = function () {
     var fresh = getTournament(p.id)
     if (!fresh) return
