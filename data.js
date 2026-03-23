@@ -196,6 +196,7 @@ function getTournament(id) {
   return getTournaments().find(function (t) { return t.id === id }) || null
 }
 function saveTournament(tournament) {
+  if (tournament && tournament.format === 'duel-meet' && typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(tournament)
   if (!tournament.creatorId) tournament.creatorId = getMyUserId()
   tournament.updateTime = Date.now()
   var list = getTournaments()
@@ -257,10 +258,193 @@ function parseExcel(arrayBuffer) {
   return players
 }
 
+/* ===== Duel Meet Format ===== */
+var DUEL_MEET_TYPES = {
+  'men-singles': { label: '男单', pointValue: 1, slots: ['male'] },
+  'women-singles': { label: '女单', pointValue: 1, slots: ['female'] },
+  'men-doubles': { label: '男双', pointValue: 2, slots: ['male', 'male'] },
+  'women-doubles': { label: '女双', pointValue: 2, slots: ['female', 'female'] },
+  'mixed-doubles': { label: '混双', pointValue: 2, slots: ['male', 'female'] }
+}
+
+function initDuelMeetData() {
+  return {
+    teamA: { id: 'duel_team_a', name: 'A队', malePlayers: [], femalePlayers: [] },
+    teamB: { id: 'duel_team_b', name: 'B队', malePlayers: [], femalePlayers: [] },
+    config: { menSingles: 0, womenSingles: 0, menDoubles: 0, womenDoubles: 0, mixedDoubles: 0 },
+    matchPlan: []
+  }
+}
+
+function _duelRosterToMembers(list, gender) {
+  return (list || []).map(function (pl) {
+    return {
+      id: pl.id,
+      name: pl.name + (gender === 'male' ? '（男）' : '（女）'),
+      score: 0,
+      gender: gender
+    }
+  })
+}
+
+function syncDuelMeetDerivedData(tournament) {
+  if (!tournament || tournament.format !== 'duel-meet') return tournament
+  var dm = tournament.duelMeet || initDuelMeetData()
+  var allPlayers = []
+  ;['teamA', 'teamB'].forEach(function (teamKey) {
+    var team = dm[teamKey] || {}
+    ;(team.malePlayers || []).forEach(function (pl) {
+      allPlayers.push({ id: pl.id, name: pl.name, score: 0, gender: 'male', teamKey: teamKey })
+    })
+    ;(team.femalePlayers || []).forEach(function (pl) {
+      allPlayers.push({ id: pl.id, name: pl.name, score: 0, gender: 'female', teamKey: teamKey })
+    })
+  })
+  tournament.players = allPlayers
+  tournament.groups = allPlayers.length > 0 ? [
+    {
+      name: dm.teamA && dm.teamA.name ? dm.teamA.name : 'A队',
+      members: _duelRosterToMembers((dm.teamA && dm.teamA.malePlayers) || [], 'male').concat(_duelRosterToMembers((dm.teamA && dm.teamA.femalePlayers) || [], 'female'))
+    },
+    {
+      name: dm.teamB && dm.teamB.name ? dm.teamB.name : 'B队',
+      members: _duelRosterToMembers((dm.teamB && dm.teamB.malePlayers) || [], 'male').concat(_duelRosterToMembers((dm.teamB && dm.teamB.femalePlayers) || [], 'female'))
+    }
+  ] : null
+  tournament.duelMeet = dm
+  return tournament
+}
+
+function _pushDuelPlan(list, typeKey, count) {
+  var def = DUEL_MEET_TYPES[typeKey]
+  for (var i = 0; i < count; i++) {
+    list.push({
+      id: makeMatchId('dm'),
+      duelType: typeKey,
+      matchLabel: def.label + ' 第' + (i + 1) + '场',
+      pointValue: def.pointValue,
+      team1PlayerIds: new Array(def.slots.length).fill(''),
+      team2PlayerIds: new Array(def.slots.length).fill('')
+    })
+  }
+}
+
+function generateDuelMeetMatchPlan(config) {
+  var plan = []
+  var cfg = config || {}
+  _pushDuelPlan(plan, 'men-singles', Math.max(0, parseInt(cfg.menSingles) || 0))
+  _pushDuelPlan(plan, 'women-singles', Math.max(0, parseInt(cfg.womenSingles) || 0))
+  _pushDuelPlan(plan, 'men-doubles', Math.max(0, parseInt(cfg.menDoubles) || 0))
+  _pushDuelPlan(plan, 'women-doubles', Math.max(0, parseInt(cfg.womenDoubles) || 0))
+  _pushDuelPlan(plan, 'mixed-doubles', Math.max(0, parseInt(cfg.mixedDoubles) || 0))
+  return plan
+}
+
+function _buildDuelLineupName(teamName, players) {
+  return teamName + ' · ' + players.map(function (pl) { return pl.name }).join('/')
+}
+
+function _buildDuelTeamPayload(teamId, teamName, players) {
+  return {
+    id: teamId,
+    name: _buildDuelLineupName(teamName, players),
+    baseName: teamName,
+    players: players.map(function (pl) { return { id: pl.id, name: pl.name, gender: pl.gender } }),
+    score: 0
+  }
+}
+
+function generateDuelMeetMatches(duelMeet) {
+  if (!duelMeet) return []
+  var teamA = duelMeet.teamA || {}
+  var teamB = duelMeet.teamB || {}
+  var map = {}
+  ;['teamA', 'teamB'].forEach(function (teamKey) {
+    var team = duelMeet[teamKey] || {}
+    ;(team.malePlayers || []).forEach(function (pl) { map[pl.id] = { id: pl.id, name: pl.name, gender: 'male', teamKey: teamKey } })
+    ;(team.femalePlayers || []).forEach(function (pl) { map[pl.id] = { id: pl.id, name: pl.name, gender: 'female', teamKey: teamKey } })
+  })
+  return (duelMeet.matchPlan || []).map(function (plan, idx) {
+    var team1Players = (plan.team1PlayerIds || []).map(function (id) { return map[id] }).filter(Boolean)
+    var team2Players = (plan.team2PlayerIds || []).map(function (id) { return map[id] }).filter(Boolean)
+    return {
+      id: plan.id || makeMatchId('dm'),
+      stage: 'duel-meet',
+      duelType: plan.duelType,
+      matchLabel: plan.matchLabel || ((DUEL_MEET_TYPES[plan.duelType] || {}).label || '对对碰') + ' 第' + (idx + 1) + '场',
+      pointValue: plan.pointValue || ((DUEL_MEET_TYPES[plan.duelType] || {}).pointValue || 1),
+      round: idx + 1,
+      team1: _buildDuelTeamPayload((teamA.id || 'duel_team_a'), teamA.name || 'A队', team1Players),
+      team2: _buildDuelTeamPayload((teamB.id || 'duel_team_b'), teamB.name || 'B队', team2Players),
+      score1: '',
+      score2: '',
+      winnerId: null,
+      status: 'pending'
+    }
+  })
+}
+
+function calculateDuelMeetStandings(tournament) {
+  if (!tournament || tournament.format !== 'duel-meet') return []
+  var dm = tournament.duelMeet || initDuelMeetData()
+  var standings = [
+    { id: (dm.teamA && dm.teamA.id) || 'duel_team_a', name: (dm.teamA && dm.teamA.name) || 'A队', wins: 0, losses: 0, points: 0, scoreFor: 0, scoreAgainst: 0, played: 0 },
+    { id: (dm.teamB && dm.teamB.id) || 'duel_team_b', name: (dm.teamB && dm.teamB.name) || 'B队', wins: 0, losses: 0, points: 0, scoreFor: 0, scoreAgainst: 0, played: 0 }
+  ]
+  var map = {}
+  standings.forEach(function (it) { map[it.id] = it })
+  ;(tournament.matches || []).filter(function (m) { return m.stage === 'duel-meet' && m.status === 'finished' && m.winnerId }).forEach(function (m) {
+    var pointValue = m.pointValue || ((DUEL_MEET_TYPES[m.duelType] || {}).pointValue || 1)
+    var s1 = parseNetGames(m.score1)
+    if (map[m.team1.id]) {
+      map[m.team1.id].played++
+      map[m.team1.id].scoreFor += s1.won
+      map[m.team1.id].scoreAgainst += s1.lost
+      if (m.winnerId === m.team1.id) { map[m.team1.id].wins++; map[m.team1.id].points += pointValue }
+      else map[m.team1.id].losses++
+    }
+    if (map[m.team2.id]) {
+      map[m.team2.id].played++
+      map[m.team2.id].scoreFor += s1.lost
+      map[m.team2.id].scoreAgainst += s1.won
+      if (m.winnerId === m.team2.id) { map[m.team2.id].wins++; map[m.team2.id].points += pointValue }
+      else map[m.team2.id].losses++
+    }
+  })
+  return standings.sort(function (a, b) {
+    if (b.points !== a.points) return b.points - a.points
+    var netA = a.scoreFor - a.scoreAgainst, netB = b.scoreFor - b.scoreAgainst
+    if (netB !== netA) return netB - netA
+    if (b.wins !== a.wins) return b.wins - a.wins
+    return a.name.localeCompare(b.name)
+  })
+}
+
 function groupsToText(tournament) {
   var fl = {
     'round-robin':'单循环', 'group-knockout':'小组循环+淘汰赛',
-    'single-knockout':'单循环+淘汰赛', 'nine-team':'9组大战赛'
+    'single-knockout':'单循环+淘汰赛', 'nine-team':'9组大战赛', 'duel-meet':'对对碰'
+  }
+  if (tournament && tournament.format === 'duel-meet') {
+    var dm = tournament.duelMeet || initDuelMeetData()
+    var st = calculateDuelMeetStandings(tournament)
+    var text = '【' + tournament.name + '】\n'
+    text += '类型：团体赛 | 赛制：对对碰\n'
+    text += '━━━━━━━━━━━━━━━━━━\n\n'
+    text += '◆ ' + ((dm.teamA && dm.teamA.name) || 'A队') + '\n'
+    ;(dm.teamA.malePlayers || []).forEach(function (pl, idx) { text += '  男' + (idx + 1) + '. ' + pl.name + '\n' })
+    ;(dm.teamA.femalePlayers || []).forEach(function (pl, idx) { text += '  女' + (idx + 1) + '. ' + pl.name + '\n' })
+    text += '\n◆ ' + ((dm.teamB && dm.teamB.name) || 'B队') + '\n'
+    ;(dm.teamB.malePlayers || []).forEach(function (pl, idx) { text += '  男' + (idx + 1) + '. ' + pl.name + '\n' })
+    ;(dm.teamB.femalePlayers || []).forEach(function (pl, idx) { text += '  女' + (idx + 1) + '. ' + pl.name + '\n' })
+    if (st.length > 0) {
+      text += '\n◆ 当前排名\n'
+      st.forEach(function (row, idx) {
+        var net = (row.scoreFor || 0) - (row.scoreAgainst || 0)
+        text += '  ' + (idx + 1) + '. ' + row.name + ' - 积分' + row.points + '，胜' + row.wins + '，负' + row.losses + '，净局' + (net > 0 ? '+' : '') + net + '\n'
+      })
+    }
+    return text.trim()
   }
   var text = '【'+tournament.name+'】\n'
   text += '类型：'+(tournament.type==='singles'?'单打':'双打')+' | 赛制：'+(fl[tournament.format]||'未知')+'\n'

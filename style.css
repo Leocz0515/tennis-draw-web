@@ -214,6 +214,7 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .info-count{font-size:13px;color:var(--text2);margin-top:4px;font-weight:400}
 .method-input-row{display:flex;align-items:center;gap:8px;margin-top:8px}
 .method-input{width:64px;text-align:center}
+.duel-count-grid,.duel-config-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .draw-options{display:flex;gap:10px}
 .draw-option{flex:1;padding:14px 8px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);text-align:center;transition:var(--tr);cursor:pointer}
 .draw-option.active{border-color:var(--accent);background:var(--accent-dim)}
@@ -364,6 +365,15 @@ select.input-field{appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .custom-group-name-score{font-size:12px;color:var(--text2);margin-right:8px;min-width:30px;text-align:right;font-weight:400}
 .custom-group-btns{display:flex;gap:4px;flex-shrink:0}
 
+/* ===== Duel Meet ===== */
+.duel-team-card .input-field+.input-field{margin-top:6px}
+.duel-plan-card{padding:14px}
+.duel-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.duel-plan-side{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:12px}
+.duel-plan-team{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.duel-plan-select+.section-subtitle{margin-top:10px}
+
 /* ===== Responsive ===== */
 @media(max-width:380px){.type-option{padding:14px 6px;min-width:70px}.type-icon{font-size:22px}.type-label{font-size:12px}.stage-tab{padding:9px 12px;font-size:11px}}
+@media(max-width:520px){.duel-plan-grid,.duel-count-grid,.duel-config-grid{grid-template-columns:1fr}}
 @media(min-width:521px){body{background:#080A0D}#app{box-shadow:0 0 60px rgba(0,0,0,.5)}}

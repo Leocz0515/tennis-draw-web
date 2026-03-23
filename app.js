@@ -185,8 +185,51 @@ function render() {
 function _t(id) { return (_viewer && _viewerTournament) ? _viewerTournament : getTournament(id) }
 
 /* ===== Format Labels ===== */
-var FMT = { 'round-robin': '单循环', 'group-knockout': '小组循环+淘汰赛', 'single-knockout': '单循环+淘汰赛', 'nine-team': '9组大战赛', 'four-rotation': '四人轮转双打' }
+var FMT = { 'round-robin': '单循环', 'group-knockout': '小组循环+淘汰赛', 'single-knockout': '单循环+淘汰赛', 'nine-team': '9组大战赛', 'four-rotation': '四人轮转双打', 'duel-meet': '对对碰赛制' }
 var TYPE = { singles: '单打', doubles: '双打' }
+var DUEL_CONFIG_KEYS = ['menSingles', 'womenSingles', 'menDoubles', 'womenDoubles', 'mixedDoubles']
+
+function _eventTypeText(t) {
+  if (!t) return ''
+  if (t.format === 'duel-meet') return '团体赛'
+  return TYPE[t.type] || ''
+}
+
+function _duelTypeLabel(type) {
+  return DUEL_MEET_TYPES[type] ? DUEL_MEET_TYPES[type].label : '对对碰'
+}
+
+function _duelTeamPlayerCount(team) {
+  team = team || {}
+  return ((team.malePlayers || []).length + (team.femalePlayers || []).length)
+}
+
+function _duelTotalPlayerCount(dm) {
+  dm = dm || initDuelMeetData()
+  return _duelTeamPlayerCount(dm.teamA) + _duelTeamPlayerCount(dm.teamB)
+}
+
+function _duelTotalMatchCount(dm) {
+  dm = dm || initDuelMeetData()
+  var cfg = dm.config || {}
+  return DUEL_CONFIG_KEYS.reduce(function (sum, key) { return sum + (parseInt(cfg[key]) || 0) }, 0)
+}
+
+function _duelMeetNextPath(t) {
+  var dm = t.duelMeet || initDuelMeetData()
+  if (t.matches && t.matches.length > 0) return '/schedule?id=' + t.id
+  if (dm.matchPlan && dm.matchPlan.length > 0) return '/result?id=' + t.id
+  if (_duelTotalMatchCount(dm) > 0) return '/settings?id=' + t.id
+  return '/players?id=' + t.id
+}
+
+function _resizeDuelList(list, count) {
+  list = list || []
+  count = Math.max(0, count || 0)
+  var next = list.slice(0, count)
+  while (next.length < count) next.push({ id: generateId(), name: '' })
+  return next
+}
 
 /* ====================================================================
    PAGE: HOME
@@ -208,11 +251,11 @@ function renderHome() {
       var mine = isCreator(t)
       if (mine) html += '<div class="swipe-wrap" data-id="' + t.id + '">'
       html += '<div class="card tournament-card" data-id="' + t.id + '">'
-      html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(TYPE[t.type] || '') + '</div></div>'
+      html += '<div class="flex-between"><div class="tournament-name">' + esc(t.name) + '</div><div class="score-badge">' + esc(_eventTypeText(t) || '') + '</div></div>'
       html += '<div class="tournament-meta">'
       html += '<span class="tag tag-green">' + esc(FMT[t.format] || '') + '</span>'
       if (_firebaseReady && !mine) html += '<span class="tag" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);font-size:10px">他人创建</span>'
-      if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + '组</span>'
+      if (t.groups) html += '<span class="tag tag-orange">' + t.groups.length + (t.format === 'duel-meet' ? '队' : '组') + '</span>'
       if (t.players) html += '<span class="tag tag-blue">' + t.players.length + '人</span>'
       var _mc = (t.matches || []).length, _fc = (t.matches || []).filter(function (m) { return m.status === 'finished' }).length
       if (_mc > 0) html += '<span class="tag tag-purple">' + _fc + '/' + _mc + '场</span>'
@@ -294,6 +337,10 @@ function mountHome() {
       if (_openSwipe) { _closeAllSwipes(); return }
       var tid = el.dataset.id, tt = getTournament(tid)
       if (!tt) { navigate('/result?id=' + tid); return }
+      if (tt.format === 'duel-meet') {
+        navigate(_duelMeetNextPath(tt))
+        return
+      }
       if (tt.format === 'four-rotation') {
         if (tt.matches && tt.matches.length > 0) { navigate('/schedule?id=' + tid) }
         else { navigate('/players?id=' + tid) }
@@ -376,16 +423,18 @@ function renderCreate() {
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">新建比赛</div><div style="width:40px"></div></div>'
   html += '<div class="card"><div class="section-title mb-sm">比赛名称</div>'
   html += '<input class="input-field" id="inp-name" placeholder="如：2025春季网球赛" value="' + esc(_ps.name) + '" maxlength="30"></div>'
-  if (_ps.format !== 'four-rotation') {
+  if (_ps.format !== 'four-rotation' && _ps.format !== 'duel-meet') {
     html += '<div class="card"><div class="section-title mb-sm">比赛类型</div><div class="flex-row gap-md">'
     html += '<div class="type-option' + (_ps.type === 'singles' ? ' type-option-active' : '') + '" data-type="singles"><div class="type-icon">单</div><div class="type-label">单打</div></div>'
     html += '<div class="type-option' + (_ps.type === 'doubles' ? ' type-option-active' : '') + '" data-type="doubles"><div class="type-icon">双</div><div class="type-label">双打</div></div>'
     html += '</div></div>'
+  } else if (_ps.format === 'duel-meet') {
+    html += '<div class="guide-tip">对对碰赛制：两队参赛，分别录入男女名单，按男单/女单/男双/女双/混双自定义对阵并按积分决胜。</div>'
   } else {
     html += '<div class="guide-tip">四人轮转双打：4名选手轮流搭档，3轮比赛，个人积分排名</div>'
   }
   html += '<div class="card"><div class="section-title mb-sm">赛制</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-  ;[['round-robin','','单循环','所有对手循环赛'],['group-knockout','','小组循环+淘汰','分组循环后淘汰赛'],['single-knockout','','单循环+淘汰','循环赛后淘汰赛'],['nine-team','','9组大战赛','9队3组多阶段赛'],['four-rotation','','四人轮转双打','4人3轮轮转搭档']].forEach(function(f){
+  ;[['round-robin','','单循环','所有对手循环赛'],['group-knockout','','小组循环+淘汰','分组循环后淘汰赛'],['single-knockout','','单循环+淘汰','循环赛后淘汰赛'],['nine-team','','9组大战赛','9队3组多阶段赛'],['four-rotation','','四人轮转双打','4人3轮轮转搭档'],['duel-meet','','对对碰赛制','两队按项目自定义对阵']].forEach(function(f){
     html+='<div class="type-option'+(_ps.format===f[0]?' type-option-active':'')+'" data-format="'+f[0]+'" style="min-width:0"><div class="type-icon">'+f[1]+'</div><div class="type-label">'+esc(f[2])+'</div><div class="type-desc">'+esc(f[3])+'</div></div>'
   })
   html += '</div></div>'
@@ -403,20 +452,24 @@ function mountCreate() {
   document.querySelectorAll('[data-format]').forEach(function (el) {
     el.onclick = function () {
       _ps.format = el.dataset.format
-      if (_ps.format === 'four-rotation') _ps.type = 'singles'
+      if (_ps.format === 'four-rotation' || _ps.format === 'duel-meet') _ps.type = 'singles'
       render()
     }
   })
   document.getElementById('btn-next').onclick = function () {
     var name = (_ps.name || '').trim()
     if (!name) { showToast('请输入比赛名称'); return }
-    var tType = _ps.format === 'four-rotation' ? 'singles' : _ps.type
+    var tType = (_ps.format === 'four-rotation' || _ps.format === 'duel-meet') ? 'singles' : _ps.type
     var t = {
       id: generateId(), name: name, type: tType, format: _ps.format,
       players: [], teams: [], groups: null, matches: [], knockout: null,
-      settings: {}, nineTeam: null, createTime: Date.now()
+      settings: {}, nineTeam: null, duelMeet: null, createTime: Date.now()
     }
     if (_ps.format === 'nine-team') t.nineTeam = init9TeamData()
+    if (_ps.format === 'duel-meet') {
+      t.duelMeet = initDuelMeetData()
+      if (typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(t)
+    }
     saveTournament(t)
     navigate('/players?id=' + t.id)
   }
@@ -428,12 +481,13 @@ function mountCreate() {
 function renderPlayers(p) {
   var t = getTournament(p.id)
   if (!t) return _notFoundHtml()
+  if (t.format === 'duel-meet') return renderDuelMeetPlayers(p, t)
   if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以管理球员</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
   var players = (t.players || []).slice().sort(function (a, b) { return b.score - a.score })
   var total = players.length, avg = total ? Math.round(players.reduce(function (s, p) { return s + p.score }, 0) / total) : 0
   var html = '<div class="container">'
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">选手管理</div><div style="width:40px"></div></div>'
-  html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">共 ' + total + ' 人 · 平均积分 ' + avg + '</div></div><div class="score-badge">' + esc(TYPE[t.type]) + '</div></div></div>'
+  html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">共 ' + total + ' 人 · 平均积分 ' + avg + '</div></div><div class="score-badge">' + esc(_eventTypeText(t)) + '</div></div></div>'
   if (t.format === 'four-rotation') {
     if (total !== 4) html += '<div class="guide-tip">四人轮转双打需要恰好 4 名选手（当前 ' + total + ' 名）</div>'
     else html += '<div class="guide-tip">已添加4名选手，可以开始比赛</div>'
@@ -478,6 +532,7 @@ function mountPlayers(p) {
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
   var t = getTournament(p.id)
   if (!t) return
+  if (t.format === 'duel-meet') { mountDuelMeetPlayers(p, t); return }
 
   document.getElementById('btn-add').onclick = function () {
     var nm = document.getElementById('inp-pname').value.trim()
@@ -568,6 +623,113 @@ function mountPlayers(p) {
     if (t.players.length < 2) { showToast('至少需要2名选手'); return }
     if (t.type === 'doubles') navigate('/pairing?id=' + t.id)
     else navigate('/settings?id=' + t.id)
+  }
+}
+
+function _renderDuelMeetTeamEditor(teamKey, team, prefix) {
+  team = team || {}
+  var male = team.malePlayers || []
+  var female = team.femalePlayers || []
+  var html = '<div class="card duel-team-card">'
+  html += '<div class="section-title mb-sm">' + esc(prefix === 'a' ? '队伍A' : '队伍B') + '</div>'
+  html += '<div class="method-input-row"><span class="seed-label">队伍名称</span><input class="input-field" id="dm-' + prefix + '-name" value="' + esc(team.name || (prefix === 'a' ? 'A队' : 'B队')) + '" maxlength="20" placeholder="请输入队名"></div>'
+  html += '<div class="duel-count-grid mt-sm">'
+  html += '<div class="method-input-row"><span class="seed-label">男队员</span><input class="input-field method-input" id="dm-' + prefix + '-male-count" type="number" min="0" value="' + male.length + '"></div>'
+  html += '<div class="method-input-row"><span class="seed-label">女队员</span><input class="input-field method-input" id="dm-' + prefix + '-female-count" type="number" min="0" value="' + female.length + '"></div>'
+  html += '</div>'
+  html += '<div class="section-subtitle mt-sm">男队员名单</div>'
+  if (male.length === 0) html += '<div class="text-sm text-hint">先设置男队员人数</div>'
+  male.forEach(function (pl, idx) {
+    html += '<input class="input-field mt-xs" id="dm-' + prefix + '-male-' + idx + '" value="' + esc(pl.name || '') + '" maxlength="20" placeholder="男队员' + (idx + 1) + '">'
+  })
+  html += '<div class="section-subtitle mt-sm">女队员名单</div>'
+  if (female.length === 0) html += '<div class="text-sm text-hint">先设置女队员人数</div>'
+  female.forEach(function (pl, idx) {
+    html += '<input class="input-field mt-xs" id="dm-' + prefix + '-female-' + idx + '" value="' + esc(pl.name || '') + '" maxlength="20" placeholder="女队员' + (idx + 1) + '">'
+  })
+  html += '</div>'
+  return html
+}
+
+function renderDuelMeetPlayers(p, t) {
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以管理队伍名单</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
+  var dm = t.duelMeet || initDuelMeetData()
+  var total = _duelTotalPlayerCount(dm)
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">队伍名单</div><div style="width:40px"></div></div>'
+  html += '<div class="card summary-bar"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="player-count">两队共 ' + total + ' 人 · 分别录入男女队员名单</div></div><div class="score-badge">' + esc(_eventTypeText(t)) + '</div></div></div>'
+  html += '<div class="guide-tip">先设置两队男、女人数，再填写每位参赛队员姓名。下一步将设置男单、女单、男双、女双、混双场次。</div>'
+  html += _renderDuelMeetTeamEditor('teamA', dm.teamA, 'a')
+  html += _renderDuelMeetTeamEditor('teamB', dm.teamB, 'b')
+  var disabled = _duelTeamPlayerCount(dm.teamA) === 0 || _duelTeamPlayerCount(dm.teamB) === 0
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (disabled ? ' btn-disabled' : '') + '" id="btn-next">下一步：比赛设置 →</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountDuelMeetPlayers(p, t) {
+  var dm = t.duelMeet || initDuelMeetData()
+  function _updateCount(teamKey, genderKey, value) {
+    var team = dm[teamKey]
+    var count = Math.max(0, parseInt(value) || 0)
+    team[genderKey] = _resizeDuelList(team[genderKey], count)
+    t.duelMeet = dm
+    if (typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(t)
+    saveTournament(t)
+    render()
+  }
+  ;[
+    ['teamA', 'malePlayers', 'dm-a-male-count'],
+    ['teamA', 'femalePlayers', 'dm-a-female-count'],
+    ['teamB', 'malePlayers', 'dm-b-male-count'],
+    ['teamB', 'femalePlayers', 'dm-b-female-count']
+  ].forEach(function (cfg) {
+    var el = document.getElementById(cfg[2])
+    if (el) el.onchange = function () { _updateCount(cfg[0], cfg[1], el.value) }
+  })
+  document.getElementById('btn-next').onclick = function () {
+    var fresh = getTournament(p.id)
+    if (!fresh) return
+    var nextDm = fresh.duelMeet || initDuelMeetData()
+    function _readTeam(prefix, teamKey) {
+      var team = nextDm[teamKey] || {}
+      var oldMale = team.malePlayers || []
+      var oldFemale = team.femalePlayers || []
+      var maleCount = oldMale.length
+      var femaleCount = oldFemale.length
+      var maleList = [], femaleList = []
+      for (var i = 0; i < maleCount; i++) {
+        var val = (document.getElementById('dm-' + prefix + '-male-' + i).value || '').trim()
+        if (!val) return { error: '请填写完整的男队员名单' }
+        maleList.push({ id: oldMale[i] ? oldMale[i].id : generateId(), name: val })
+      }
+      for (var j = 0; j < femaleCount; j++) {
+        var fval = (document.getElementById('dm-' + prefix + '-female-' + j).value || '').trim()
+        if (!fval) return { error: '请填写完整的女队员名单' }
+        femaleList.push({ id: oldFemale[j] ? oldFemale[j].id : generateId(), name: fval })
+      }
+      return {
+        name: (document.getElementById('dm-' + prefix + '-name').value || '').trim() || (prefix === 'a' ? 'A队' : 'B队'),
+        malePlayers: maleList,
+        femalePlayers: femaleList
+      }
+    }
+    var teamA = _readTeam('a', 'teamA')
+    if (teamA.error) { showToast(teamA.error); return }
+    var teamB = _readTeam('b', 'teamB')
+    if (teamB.error) { showToast(teamB.error); return }
+    if ((teamA.malePlayers.length + teamA.femalePlayers.length) === 0 || (teamB.malePlayers.length + teamB.femalePlayers.length) === 0) {
+      showToast('两队都至少需要1名参赛队员')
+      return
+    }
+    nextDm.teamA = Object.assign({}, nextDm.teamA || {}, teamA)
+    nextDm.teamB = Object.assign({}, nextDm.teamB || {}, teamB)
+    nextDm.matchPlan = []
+    fresh.duelMeet = nextDm
+    fresh.matches = []
+    if (typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(fresh)
+    saveTournament(fresh)
+    navigate('/settings?id=' + fresh.id)
   }
 }
 
@@ -681,6 +843,7 @@ function mountPairing(p) {
 function renderSettings(p) {
   var t = getTournament(p.id)
   if (!t) return _notFoundHtml()
+  if (t.format === 'duel-meet') return renderDuelMeetSettings(p, t)
   if (t.format === 'four-rotation') {
     setTimeout(function () { location.hash = '/players?id=' + p.id }, 0)
     return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">跳转中...</div></div></div>'
@@ -700,7 +863,7 @@ function renderSettings(p) {
 
   var html = '<div class="container">'
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">抽签设置</div><div style="width:40px"></div></div>'
-  html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + itemCount + (isD ? ' 队' : ' 人') + ' · ' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div></div>'
+  html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + itemCount + (isD ? ' 队' : ' 人') + ' · ' + esc(_eventTypeText(t)) + ' · ' + esc(FMT[fmt]) + '</div></div></div>'
 
   if (fmt === 'round-robin') {
     html += '<div class="card"><div class="section-title mb-sm">赛制说明</div><div class="text-sm text-secondary">所有' + (isD ? '队伍' : '选手') + '进行循环赛，每两者之间都有一场比赛。</div></div>'
@@ -820,6 +983,7 @@ function renderSettings(p) {
 
 function mountSettings(p) {
   var t = getTournament(p.id); if (!t) return
+  if (t.format === 'duel-meet') { mountDuelMeetSettings(p, t); return }
   var s = _ps.settings || t.settings || {}
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
 
@@ -928,12 +1092,62 @@ function mountSettings(p) {
   }
 }
 
+function renderDuelMeetSettings(p, t) {
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">无编辑权限</div><div class="empty-hint">只有比赛创建者可以修改比赛设置</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
+  var dm = t.duelMeet || initDuelMeetData()
+  var cfg = dm.config || {}
+  var totalMatches = _duelTotalMatchCount(dm)
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">比赛设置</div><div style="width:40px"></div></div>'
+  html += '<div class="card info-card"><div><div class="info-name">' + esc(t.name) + '</div><div class="info-count">' + esc(_eventTypeText(t)) + ' · ' + esc((dm.teamA && dm.teamA.name) || 'A队') + ' VS ' + esc((dm.teamB && dm.teamB.name) || 'B队') + '</div></div></div>'
+  html += '<div class="guide-tip">单打胜1分，男双/女双/混双胜2分；总积分相同则看净胜局。</div>'
+  html += '<div class="card"><div class="section-title mb-sm">项目场次</div>'
+  html += '<div class="duel-config-grid">'
+  ;[
+    ['menSingles', '男单'],
+    ['womenSingles', '女单'],
+    ['menDoubles', '男双'],
+    ['womenDoubles', '女双'],
+    ['mixedDoubles', '混双']
+  ].forEach(function (row) {
+    html += '<div class="method-input-row"><span class="seed-label">' + row[1] + '</span><input class="input-field method-input" id="dmcfg-' + row[0] + '" type="number" min="0" value="' + (parseInt(cfg[row[0]]) || 0) + '"><span class="text-sm text-hint ml-sm">场</span></div>'
+  })
+  html += '</div>'
+  html += '<div class="divider"></div><div class="text-sm text-secondary">总场次：' + totalMatches + ' 场</div></div>'
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (totalMatches <= 0 ? ' btn-disabled' : '') + '" id="btn-next">下一步：自定义对阵 →</button></div>'
+  html += '</div>'
+  return html
+}
+
+function mountDuelMeetSettings(p, t) {
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
+  document.getElementById('btn-next').onclick = function () {
+    var fresh = getTournament(p.id)
+    if (!fresh) return
+    var dm = fresh.duelMeet || initDuelMeetData()
+    var cfg = {}
+    DUEL_CONFIG_KEYS.forEach(function (key) {
+      var el = document.getElementById('dmcfg-' + key)
+      cfg[key] = Math.max(0, parseInt(el && el.value) || 0)
+    })
+    var total = DUEL_CONFIG_KEYS.reduce(function (sum, key) { return sum + cfg[key] }, 0)
+    if (total <= 0) { showToast('请至少设置1场比赛'); return }
+    dm.config = cfg
+    dm.matchPlan = generateDuelMeetMatchPlan(cfg)
+    fresh.duelMeet = dm
+    if (typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(fresh)
+    saveTournament(fresh)
+    navigate('/result?id=' + fresh.id)
+  }
+}
+
 /* ====================================================================
    PAGE: RESULT
    ==================================================================== */
 function renderResult(p) {
   var t = _t(p.id)
   if (!t) return _notFoundHtml()
+  if (t.format === 'duel-meet') return renderDuelMeetResult(p, t)
   if (t.format === 'four-rotation') {
     setTimeout(function () { location.hash = (t.matches && t.matches.length > 0) ? '/schedule?id=' + p.id : '/players?id=' + p.id }, 0)
     return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">跳转中...</div></div></div>'
@@ -947,7 +1161,7 @@ function renderResult(p) {
   html += '<div class="card header-card"><div class="flex-between"><div class="header-name">' + esc(t.name) + '</div>'
   if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name" title="修改名称" style="font-size:16px;opacity:.6">编辑</button>'
   html += '</div>'
-  html += '<div class="header-summary">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt])
+  html += '<div class="header-summary">' + esc(_eventTypeText(t)) + ' · ' + esc(FMT[fmt])
   var totalMembers = 0; t.groups.forEach(function (g) { totalMembers += g.members.length })
   html += ' · ' + t.groups.length + '组 · ' + totalMembers + (isD ? '队' : '人') + '</div></div>'
 
@@ -986,7 +1200,9 @@ function renderResult(p) {
 }
 
 function mountResult(p) {
-  var t = _t(p.id); if (!t || !t.groups) return
+  var t = _t(p.id); if (!t) return
+  if (t.format === 'duel-meet') { mountDuelMeetResult(p, t); return }
+  if (!t.groups) return
   if (typeof listenToTournament === 'function') listenToTournament(p.id)
   _ps.expanded = _ps.expanded || {}
   document.getElementById('btn-home').onclick = function () { location.hash = '/' }
@@ -1044,13 +1260,108 @@ function mountResult(p) {
   }
 }
 
+function _getDuelMeetPlayerOptions(dm, teamKey, slotType) {
+  var team = dm[teamKey] || {}
+  return slotType === 'male' ? (team.malePlayers || []) : (team.femalePlayers || [])
+}
+
+function _renderDuelMeetPlanSelect(teamLabel, teamKey, dm, plan, side) {
+  var ids = side === 1 ? (plan.team1PlayerIds || []) : (plan.team2PlayerIds || [])
+  var def = DUEL_MEET_TYPES[plan.duelType] || { slots: [] }
+  var html = '<div class="duel-plan-side"><div class="duel-plan-team">' + esc(teamLabel) + '</div>'
+  def.slots.forEach(function (slotType, idx) {
+    var fieldLabel = def.slots.length === 1 ? '参赛队员' : (plan.duelType === 'mixed-doubles' ? (slotType === 'male' ? '男队员' : '女队员') : '队员' + (idx + 1))
+    html += '<div class="section-subtitle">' + fieldLabel + '</div>'
+    html += '<select class="input-field duel-plan-select" data-plan-id="' + plan.id + '" data-side="' + side + '" data-slot="' + idx + '">'
+    html += '<option value="">请选择</option>'
+    _getDuelMeetPlayerOptions(dm, teamKey, slotType).forEach(function (pl) {
+      html += '<option value="' + pl.id + '"' + ((ids[idx] || '') === pl.id ? ' selected' : '') + '>' + esc(pl.name) + '</option>'
+    })
+    html += '</select>'
+  })
+  html += '</div>'
+  return html
+}
+
+function renderDuelMeetResult(p, t) {
+  var dm = t.duelMeet || initDuelMeetData()
+  if (!_canEdit(t)) return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">无编辑权限</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/\'">返回首页</button></div></div>'
+  if (_duelTotalMatchCount(dm) <= 0) return '<div class="container"><div class="empty-state"><div class="empty-icon"></div><div class="empty-text">尚未设置比赛场次</div></div><div class="text-center mt-md"><button class="btn-primary" onclick="location.hash=\'/settings?id=' + p.id + '\'">前往设置</button></div></div>'
+  var plan = dm.matchPlan || []
+  var html = '<div class="container">'
+  html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">自定义对阵</div><div style="width:40px"></div></div>'
+  html += '<div class="card header-card"><div class="header-name">' + esc(t.name) + '</div><div class="header-summary">' + esc((dm.teamA && dm.teamA.name) || 'A队') + ' VS ' + esc((dm.teamB && dm.teamB.name) || 'B队') + ' · 共 ' + plan.length + ' 场</div></div>'
+  html += '<div class="guide-tip">逐场选择上场队员。单打双方各选1人；双打双方各选2人；混双双方各选1男1女。</div>'
+  if (plan.length === 0) html += '<div class="empty-state" style="padding:20px"><div class="empty-text">请先在上一页设置比赛场次</div></div>'
+  plan.forEach(function (item) {
+    html += '<div class="card duel-plan-card">'
+    html += '<div class="flex-between mb-sm"><div class="section-title" style="margin-bottom:0">' + esc(item.matchLabel) + '</div><div class="score-badge">' + item.pointValue + '分</div></div>'
+    html += '<div class="duel-plan-grid">'
+    html += _renderDuelMeetPlanSelect((dm.teamA && dm.teamA.name) || 'A队', 'teamA', dm, item, 1)
+    html += _renderDuelMeetPlanSelect((dm.teamB && dm.teamB.name) || 'B队', 'teamB', dm, item, 2)
+    html += '</div></div>'
+  })
+  html += '<div class="bottom-actions"><div class="action-row"><button class="btn-secondary" id="btn-back-settings">返回设置</button><button class="btn-primary" id="btn-gen-schedule">生成赛程</button></div></div>'
+  html += '</div>'
+  return html
+}
+
+function mountDuelMeetResult(p, t) {
+  if (typeof listenToTournament === 'function') listenToTournament(p.id)
+  document.getElementById('btn-home').onclick = function () { location.hash = '/' }
+  var bs = document.getElementById('btn-back-settings')
+  if (bs) bs.onclick = function () { navigate('/settings?id=' + p.id) }
+  document.querySelectorAll('.duel-plan-select').forEach(function (el) {
+    el.onchange = function () {
+      var fresh = getTournament(p.id)
+      if (!fresh || !fresh.duelMeet) return
+      var plan = fresh.duelMeet.matchPlan || []
+      var item = plan.find(function (it) { return it.id === el.dataset.planId })
+      if (!item) return
+      var sideKey = el.dataset.side === '1' ? 'team1PlayerIds' : 'team2PlayerIds'
+      if (!item[sideKey]) item[sideKey] = []
+      item[sideKey][+el.dataset.slot] = el.value
+      saveTournament(fresh)
+    }
+  })
+  var gs = document.getElementById('btn-gen-schedule')
+  if (gs) gs.onclick = function () {
+    var fresh = getTournament(p.id)
+    if (!fresh || !fresh.duelMeet) return
+    var dm = fresh.duelMeet
+    var plan = dm.matchPlan || []
+    if (plan.length === 0) { showToast('请先设置比赛场次'); return }
+    for (var i = 0; i < plan.length; i++) {
+      var item = plan[i]
+      var left = (item.team1PlayerIds || []).filter(Boolean)
+      var right = (item.team2PlayerIds || []).filter(Boolean)
+      var need = ((DUEL_MEET_TYPES[item.duelType] || {}).slots || []).length
+      if (left.length !== need || right.length !== need) {
+        showToast('请完成“' + item.matchLabel + '”的上场人员选择')
+        return
+      }
+      if (new Set(left).size !== left.length || new Set(right).size !== right.length) {
+        showToast('“' + item.matchLabel + '”中不能选择重复队员')
+        return
+      }
+    }
+    fresh.matches = generateDuelMeetMatches(dm)
+    if (typeof syncDuelMeetDerivedData === 'function') syncDuelMeetDerivedData(fresh)
+    saveTournament(fresh)
+    showToast('赛程已生成')
+    navigate('/schedule?id=' + fresh.id)
+  }
+}
+
 function doExport(t) {
+  var groupText = t.format === 'duel-meet' ? '导出队伍名单 (Excel)' : '导出分组名单 (Excel)'
+  var groupImageText = t.format === 'duel-meet' ? '导出队伍名单图片' : '导出分组图片'
   var items = [
-    { text: '导出分组名单 (Excel)', action: function () { exportGroupList(t) } },
+    { text: groupText, action: function () { exportGroupList(t) } },
     { text: '导出赛程表 (Excel)', action: function () { exportSchedule(t) } },
     { text: '导出比分表 (Excel)', action: function () { exportScores(t) } },
     { text: '导出排名 (Excel)', action: function () { exportRankings(t) } },
-    { text: '导出分组图片', action: function () { chooseImageTheme(t, 'groups') } },
+    { text: groupImageText, action: function () { chooseImageTheme(t, 'groups') } },
     { text: '导出排名图片', action: function () { chooseImageTheme(t, 'rankings') } }
   ]
   if (t.format === 'nine-team') {
@@ -1082,7 +1393,7 @@ function exportAsImage(t, type, theme) {
   if (type === 'groups') {
     ;(t.groups || []).forEach(function (g, gi) {
       body += '<div style="margin-bottom:16px;background:'+th.cardBg+';border-radius:12px;border:1px solid '+th.border+';overflow:hidden">'
-      body += '<div style="padding:10px 16px;background:'+th.headerBg+';display:flex;align-items:center;gap:8px"><span style="font-size:18px;font-weight:800;color:'+th.headerText+'">'+esc(g.name)+'</span><span style="font-size:12px;color:rgba(255,255,255,.7)">组 · '+g.members.length+'人</span></div>'
+      body += '<div style="padding:10px 16px;background:'+th.headerBg+';display:flex;align-items:center;gap:8px"><span style="font-size:18px;font-weight:800;color:'+th.headerText+'">'+esc(g.name)+'</span><span style="font-size:12px;color:rgba(255,255,255,.7)">' + (t.format === 'duel-meet' ? '队' : '组') + ' · '+g.members.length+'人</span></div>'
       g.members.forEach(function (m, i) {
         var rowBg = i % 2 === 0 ? 'transparent' : th.cardBg
         body += '<div style="display:flex;align-items:center;padding:10px 16px;background:'+rowBg+'">'
@@ -1099,7 +1410,26 @@ function exportAsImage(t, type, theme) {
       body += '</div>'
     })
   } else if (type === 'rankings') {
-    if (t.format === 'nine-team') {
+    if (t.format === 'duel-meet') {
+      var duelSt = calculateDuelMeetStandings(t)
+      if (duelSt.length > 0) {
+        body += '<div style="background:'+th.cardBg+';border-radius:12px;border:1px solid '+th.border+';overflow:hidden">'
+        body += '<div style="display:flex;padding:8px 16px;border-bottom:1px solid '+th.border+';font-size:11px;color:'+th.sub+';font-weight:600"><span style="width:30px">#</span><span style="flex:1">队伍</span><span style="width:40px;text-align:center">胜</span><span style="width:40px;text-align:center">负</span><span style="width:44px;text-align:center">净局</span><span style="width:50px;text-align:center">积分</span></div>'
+        duelSt.forEach(function (s, i) {
+          var net = (s.scoreFor || 0) - (s.scoreAgainst || 0)
+          var netStr = net > 0 ? '+' + net : String(net)
+          body += '<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid '+th.border+'">'
+          body += '<span style="width:30px;font-size:12px;font-weight:700;color:'+th.sub+'">' + (i + 1) + '</span>'
+          body += '<span style="flex:1;font-size:14px;font-weight:700;color:'+th.text+'">' + esc(s.name) + '</span>'
+          body += '<span style="width:40px;text-align:center;font-size:12px;color:'+th.text+'">' + s.wins + '</span>'
+          body += '<span style="width:40px;text-align:center;font-size:12px;color:'+th.text+'">' + s.losses + '</span>'
+          body += '<span style="width:44px;text-align:center;font-size:12px;font-weight:700;color:' + (net > 0 ? th.accent : (net < 0 ? '#FF5252' : th.sub)) + '">' + netStr + '</span>'
+          body += '<span style="width:50px;text-align:center"><span style="background:'+th.badge+';color:'+th.badgeText+';padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">' + s.points + '</span></span>'
+          body += '</div>'
+        })
+        body += '</div>'
+      } else { body += '<div style="text-align:center;padding:30px;color:'+th.sub+';font-size:14px">暂无排名数据</div>' }
+    } else if (t.format === 'nine-team') {
       var rk = compute9TeamFinalRankings(t)
       if (rk.length > 0) {
         rk.forEach(function (r) {
@@ -1158,7 +1488,7 @@ function exportAsImage(t, type, theme) {
     captureAndDownload(info.el, t.name + '_' + stageKey + '_scores.png')
     return
   }
-  var info = renderExportImage(t.name + (type === 'groups' ? ' — 分组名单' : ' — 排名'), body, theme)
+  var info = renderExportImage(t.name + (type === 'groups' ? (t.format === 'duel-meet' ? ' — 队伍名单' : ' — 分组名单') : ' — 排名'), body, theme)
   captureAndDownload(info.el, t.name + '_' + type + '.png')
 }
 
@@ -1209,14 +1539,22 @@ function exportGroupList(t) {
   ;(t.groups || []).forEach(function (g) {
     g.members.forEach(function (m, i) { rows.push([g.name + '组', i + 1, m.name, m.score, m.isSeed ? '种子' : '']) })
   })
-  exportToExcel(['组别', '序号', '名称', '积分', '种子'], rows, t.name + '_分组名单.xlsx')
+  if (t.format === 'duel-meet') {
+    rows = []
+    ;(t.groups || []).forEach(function (g) {
+      g.members.forEach(function (m, i) { rows.push([g.name, i + 1, m.name]) })
+    })
+    exportToExcel(['队伍', '序号', '队员'], rows, t.name + '_队伍名单.xlsx')
+  } else {
+    exportToExcel(['组别', '序号', '名称', '积分', '种子'], rows, t.name + '_分组名单.xlsx')
+  }
   showToast('导出成功')
 }
 
 function exportSchedule(t) {
   var rows = []
   ;(t.matches || []).forEach(function (m, i) {
-    rows.push([i + 1, m.stage || '循环赛', m.groupName || m.matchLabel || '', m.team1 ? m.team1.name : 'TBD', m.team2 ? m.team2.name : 'TBD', m.status === 'finished' ? '已完成' : '未完成'])
+    rows.push([i + 1, m.stage || '循环赛', m.matchLabel || m.groupName || '', m.team1 ? m.team1.name : 'TBD', m.team2 ? m.team2.name : 'TBD', m.status === 'finished' ? '已完成' : '未完成'])
   })
   exportToExcel(['序号', '阶段', '组/轮次', '队伍1', '队伍2', '状态'], rows, t.name + '_赛程表.xlsx')
   showToast('导出成功')
@@ -1234,7 +1572,12 @@ function exportScores(t) {
 
 function exportRankings(t) {
   var rows = []
-  if (t.format === 'four-rotation') {
+  if (t.format === 'duel-meet') {
+    calculateDuelMeetStandings(t).forEach(function (s, i) {
+      rows.push([i + 1, s.name, s.wins, s.losses, (s.scoreFor || 0) - (s.scoreAgainst || 0), s.points])
+    })
+    exportToExcel(['排名', '队伍', '胜场', '负场', '净局', '积分'], rows, t.name + '_对对碰排名.xlsx')
+  } else if (t.format === 'four-rotation') {
     var st = calculateFourRotationStandings(t.matches || [], t.players || [])
     st.forEach(function (s, i) {
       var net = s.gamesFor - s.gamesAgainst
@@ -1272,14 +1615,16 @@ function renderSchedule(p) {
   var html = '<div class="container">'
   if (_viewer) html += '<div class="viewer-banner">只读模式 - 仅供查看</div>'
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">赛程</div><button class="btn-home-link" id="btn-rankings">排名</button></div>'
-  html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(TYPE[t.type]) + ' · ' + esc(FMT[fmt]) + '</div></div>'
+  html += '<div class="card" style="padding:12px 16px"><div class="flex-between"><div><div class="text-bold">' + esc(t.name) + '</div><div class="text-xs text-secondary mt-xs">' + esc(_eventTypeText(t)) + ' · ' + esc(FMT[fmt]) + '</div></div>'
   if (_canScore(t)) html += '<button class="btn-icon" id="btn-edit-name-sch" title="修改名称" style="font-size:14px;opacity:.5">编辑</button>'
   html += '</div></div>'
   html += '<div class="flex-between mb-sm"><button class="btn-export-img" id="btn-export-stage">导出比分图片</button>'
   if (_canScore(t)) html += '<button class="btn-undo" id="btn-undo-schedule">撤回赛程</button>'
   html += '</div>'
 
-  if (fmt === 'nine-team') {
+  if (fmt === 'duel-meet') {
+    html += renderDuelMeetSchedule(t)
+  } else if (fmt === 'nine-team') {
     html += render9TeamSchedule(t)
   } else if (fmt === 'four-rotation') {
     html += renderFourRotationSchedule(t)
@@ -1292,6 +1637,24 @@ function renderSchedule(p) {
   }
 
   html += '</div>'
+  return html
+}
+
+function renderDuelMeetSchedule(t) {
+  var matches = (t.matches || []).filter(function (m) { return m.stage === 'duel-meet' })
+  var st = calculateDuelMeetStandings(t)
+  var html = ''
+  if (st.length > 0) {
+    html += '<div class="round-header">当前积分</div>'
+    html += renderStandingsTable(st, 0)
+  }
+  if (matches.length === 0) return html + '<div class="empty-state" style="padding:20px"><div class="empty-text">尚未生成赛程</div></div>'
+  ;['men-singles', 'women-singles', 'men-doubles', 'women-doubles', 'mixed-doubles'].forEach(function (type) {
+    var list = matches.filter(function (m) { return m.duelType === type })
+    if (list.length === 0) return
+    html += '<div class="round-header">' + _duelTypeLabel(type) + '</div>'
+    html += renderMatchList(list, t)
+  })
   return html
 }
 
@@ -1525,6 +1888,17 @@ function mountSchedule(p) {
 
   var usc = document.getElementById('btn-undo-schedule')
   if (usc) usc.onclick = function () {
+    if (t.format === 'duel-meet') {
+      showModal({ title: '撤回赛程', content: '将清空所有对对碰赛程和比分数据，回到自定义对阵页面，确定撤回？', confirmText: '确认撤回',
+        onConfirm: function () {
+          t = getTournament(p.id)
+          t.matches = []
+          saveTournament(t); showToast('已撤回赛程')
+          navigate('/result?id=' + t.id)
+        }
+      })
+      return
+    }
     if (t.format === 'four-rotation') {
       showModal({ title: '撤回赛程', content: '将清空所有比赛对阵和比分数据，回到选手页面，确定撤回？', confirmText: '确认撤回',
         onConfirm: function () {
@@ -2225,7 +2599,9 @@ function renderRankings(p) {
   html += '<div class="flex-between mb-md"><button class="btn-home-link" id="btn-home">首页</button><div class="section-title">排名</div><button class="btn-home-link" id="btn-back-schedule" style="font-size:13px">赛程</button></div>'
   html += '<div class="flex-between mb-sm"><button class="btn-export-img" id="btn-export-ranking">导出排名图片</button></div>'
 
-  if (fmt === 'nine-team') {
+  if (fmt === 'duel-meet') {
+    html += renderDuelMeetRankings(t)
+  } else if (fmt === 'nine-team') {
     html += render9TeamRankings(t)
   } else if (fmt === 'four-rotation') {
     html += renderFourRotationRankings(t)
@@ -2233,6 +2609,27 @@ function renderRankings(p) {
     html += renderStandardRankings(t)
   }
   html += '</div>'
+  return html
+}
+
+function renderDuelMeetRankings(t) {
+  var st = calculateDuelMeetStandings(t)
+  var html = ''
+  if (st.length === 0) return '<div class="empty-state" style="padding:20px"><div class="empty-text">暂无排名数据</div></div>'
+  var allDone = (t.matches || []).length > 0 && (t.matches || []).every(function (m) { return m.status === 'finished' })
+  if (allDone && st[0]) {
+    var topNet = (st[0].scoreFor || 0) - (st[0].scoreAgainst || 0)
+    var secNet = st[1] ? ((st[1].scoreFor || 0) - (st[1].scoreAgainst || 0)) : -999
+    if (!st[1] || st[0].points !== st[1].points || topNet !== secNet) {
+      html += '<div class="champion-card"><div class="champion-crown">1</div><div class="champion-title">WINNER</div><div class="champion-name">' + esc(st[0].name) + '</div></div>'
+    } else {
+      html += '<div class="guide-tip">当前总积分和净胜局相同，显示并列状态。</div>'
+    }
+  }
+  html += '<div class="round-header">队伍排名</div>'
+  html += renderStandingsTable(st, 0)
+  html += '<div class="round-header mt-lg">赛制说明</div>'
+  html += '<div class="card"><div class="text-sm text-secondary">单打胜1分，男双/女双/混双胜2分；总积分相同看净胜局。</div></div>'
   return html
 }
 
