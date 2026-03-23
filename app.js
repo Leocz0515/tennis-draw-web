@@ -1110,11 +1110,11 @@ function renderDuelMeetSettings(p, t) {
     ['womenDoubles', '女双'],
     ['mixedDoubles', '混双']
   ].forEach(function (row) {
-    html += '<div class="method-input-row"><span class="seed-label">' + row[1] + '</span><input class="input-field method-input" id="dmcfg-' + row[0] + '" type="number" min="0" value="' + (parseInt(cfg[row[0]]) || 0) + '"><span class="text-sm text-hint ml-sm">场</span></div>'
+    html += '<div class="method-input-row"><span class="seed-label">' + row[1] + '</span><input class="input-field method-input" id="dmcfg-' + row[0] + '" type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="' + (parseInt(cfg[row[0]]) || 0) + '"><span class="text-sm text-hint ml-sm">场</span></div>'
   })
   html += '</div>'
   html += '<div class="divider"></div><div class="text-sm text-secondary" id="duel-total-count">总场次：' + totalMatches + ' 场</div></div>'
-  html += '<div class="bottom-bar"><button class="btn-primary btn-block' + (totalMatches <= 0 ? ' btn-disabled' : '') + '" id="btn-next">下一步：自定义对阵 →</button></div>'
+  html += '<div class="bottom-bar"><button class="btn-primary btn-block" id="btn-next">下一步：自定义对阵 →</button></div>'
   html += '</div>'
   return html
 }
@@ -1131,11 +1131,6 @@ function mountDuelMeetSettings(p, t) {
     })
     var totalEl = document.getElementById('duel-total-count')
     if (totalEl) totalEl.textContent = '总场次：' + total + ' 场'
-    var btn = document.getElementById('btn-next')
-    if (btn) {
-      if (total <= 0) btn.classList.add('btn-disabled')
-      else btn.classList.remove('btn-disabled')
-    }
     return total
   }
   DUEL_CONFIG_KEYS.forEach(function (key) {
@@ -1143,10 +1138,13 @@ function mountDuelMeetSettings(p, t) {
     if (el) {
       el.oninput = _syncDuelConfigPreview
       el.onchange = _syncDuelConfigPreview
+      el.onkeyup = _syncDuelConfigPreview
+      el.onblur = _syncDuelConfigPreview
     }
   })
   _syncDuelConfigPreview()
   document.getElementById('btn-next').onclick = function () {
+    _syncDuelConfigPreview()
     var fresh = getTournament(p.id)
     if (!fresh) return
     var dm = fresh.duelMeet || initDuelMeetData()
